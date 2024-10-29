@@ -1,0 +1,231 @@
+/* Base styles */
+.root {
+    -fx-background-color: #111827;
+    -fx-font-family: 'Segoe UI', sans-serif;
+}
+
+/* Top bar styles */
+.top-bar {
+    -fx-background-color: #1F2937;
+    -fx-padding: 15px 20px;
+    -fx-spacing: 10px;
+}
+
+.game-title {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+    -fx-text-fill: linear-gradient(to right, #3B82F6, #8B5CF6);
+}
+
+.subtitle {
+    -fx-font-size: 14px;
+    -fx-text-fill: #9CA3AF;
+}
+
+/* Player board styles */
+.player-board {
+    -fx-background-color: #1F2937;
+    -fx-padding: 20px;
+    -fx-spacing: 15px;
+    -fx-background-radius: 10px;
+}
+
+.player-board.active {
+    -fx-border-color: #4F46E5;
+    -fx-border-width: 2px;
+    -fx-border-radius: 10px;
+}
+
+.player-name {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: white;
+}
+
+.score-label {
+    -fx-background-color: #374151;
+    -fx-padding: 5px 15px;
+    -fx-background-radius: 5px;
+    -fx-text-fill: #60A5FA;
+    -fx-font-size: 16px;
+}
+
+/* Factory display styles */
+.factory-display {
+    -fx-background-color: #1F2937;
+    -fx-padding: 15px;
+    -fx-background-radius: 10px;
+    -fx-alignment: center;
+}
+
+.factory-label {
+    -fx-text-fill: #9CA3AF;
+    -fx-font-size: 12px;
+}
+
+/* Center pool styles */
+.center-pool {
+    -fx-background-color: #1F2937;
+    -fx-padding: 20px;
+    -fx-background-radius: 10px;
+    -fx-alignment: center;
+}
+
+.center-label {
+    -fx-text-fill: #9CA3AF;
+    -fx-font-size: 14px;
+}
+
+/* Tile styles */
+.tile-space {
+    -fx-fill: #374151;
+    -fx-stroke: #4B5563;
+    -fx-stroke-width: 1px;
+}
+
+.tile-space:hover {
+    -fx-stroke: #60A5FA;
+    -fx-stroke-width: 2px;
+    -fx-cursor: hand;
+}
+
+/* Pattern lines styles */
+.pattern-lines {
+    -fx-spacing: 5px;
+}
+
+.pattern-line {
+    -fx-spacing: 5px;
+    -fx-alignment: center-left;
+}
+
+/* Wall grid styles */
+.wall-grid {
+    -fx-hgap: 5px;
+    -fx-vgap: 5px;
+}
+
+/* Floor line styles */
+.floor-line {
+    -fx-spacing: 5px;
+}
+
+/* Control bar styles */
+.control-bar {
+    -fx-background-color: #1F2937;
+    -fx-padding: 15px;
+    -fx-spacing: 10px;
+    -fx-alignment: center;
+}
+
+/* Button styles */
+.game-button {
+    -fx-background-color: #3B82F6;
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+    -fx-padding: 8px 15px;
+    -fx-background-radius: 5px;
+    -fx-cursor: hand;
+}
+
+.game-button:hover {
+    -fx-background-color: #2563EB;
+}
+
+.game-button.danger {
+    -fx-background-color: #DC2626;
+}
+
+.game-button.danger:hover {
+    -fx-background-color: #B91C1C;
+}
+
+/* Timer styles */
+.timer-label {
+    -fx-text-fill: #9CA3AF;
+    -fx-font-size: 16px;
+}
+
+.timer-label.warning {
+    -fx-text-fill: #EF4444;
+}
+
+/* Dialog styles */
+.dialog-pane {
+    -fx-background-color: #1F2937;
+}
+
+.dialog-pane .header-panel {
+    -fx-background-color: #111827;
+    -fx-padding: 20px;
+}
+
+.dialog-pane .header-panel .label {
+    -fx-text-fill: white;
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+.dialog-pane .content.label {
+    -fx-text-fill: #9CA3AF;
+    -fx-font-size: 14px;
+}
+
+.dialog-pane .button-bar .button {
+    -fx-background-color: #3B82F6;
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+    -fx-padding: 8px 15px;
+    -fx-background-radius: 5px;
+}
+
+.dialog-pane .button-bar .button:hover {
+    -fx-background-color: #2563EB;
+}
+
+/* Tile colors */
+.tile-blue {
+    -fx-fill: #2563EB;
+}
+
+.tile-white {
+    -fx-fill: #F3F4F6;
+}
+
+.tile-red {
+    -fx-fill: #DC2626;
+}
+
+.tile-black {
+    -fx-fill: #1F2937;
+}
+
+.tile-yellow {
+    -fx-fill: #F59E0B;
+}
+
+/* Animation classes */
+.fade-in {
+    -fx-opacity: 0;
+    -fx-animation: fadeIn 0.5s forwards;
+}
+
+.slide-in-left {
+    -fx-translate-x: -50px;
+    -fx-animation: slideIn 0.5s forwards;
+}
+
+.slide-in-right {
+    -fx-translate-x: 50px;
+    -fx-animation: slideIn 0.5s forwards;
+}
+
+@keyframes fadeIn {
+    from { -fx-opacity: 0; }
+    to { -fx-opacity: 1; }
+}
+
+@keyframes slideIn {
+    from { -fx-translate-x: -50px; }
+    to { -fx-translate-x: 0; }
+}

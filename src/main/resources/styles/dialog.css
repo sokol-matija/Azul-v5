@@ -1,0 +1,26 @@
+.dialog-pane {
+    -fx-background-color: #1F2937;
+}
+.dialog-pane > *.header-panel {
+    -fx-background-color: #111827;
+}
+.dialog-pane > *.header-panel *.label {
+    -fx-font-size: 18px;
+    -fx-text-fill: white;
+}
+.dialog-pane > *.content.label {
+    -fx-font-size: 14px;
+    -fx-text-fill: #9CA3AF;
+}
+.dialog-pane > *.button-bar > *.container {
+    -fx-background-color: #1F2937;
+}
+.dialog-pane > *.button-bar *.button {
+    -fx-background-color: #3B82F6;
+    -fx-text-fill: white;
+    -fx-background-radius: 5;
+    -fx-padding: 8 15;
+}
+.dialog-pane > *.button-bar *.button:hover {
+    -fx-background-color: #2563EB;
+}
