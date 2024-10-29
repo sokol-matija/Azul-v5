@@ -5,11 +5,8 @@ import hr.algebra.azul.view.ModernGameView;
 import javafx.animation.*;
 import javafx.application.Platform;
 import javafx.scene.control.*;
-import javafx.scene.layout.Region;
 import javafx.stage.Stage;
 import javafx.util.Duration;
-
-import static javafx.scene.input.KeyCode.S;
 
 public class ModernGameController {
     private ModernGameView view;

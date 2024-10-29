@@ -5,7 +5,6 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.effect.DropShadow;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
@@ -53,7 +52,7 @@ public class ModernTwoPlayerGameView {
 //        root = new BorderPane();
 //        root.setStyle(String.format("-fx-background-color: %s;", DARK_BG));
         root = new BorderPane();
-        root.getStylesheets().add(getClass().getResource("/styles/game.css").toExternalForm());
+        root.getStylesheets().add(getClass().getResource("/game.css").toExternalForm());
 
         createTopBar();
         createPlayerBoards();
@@ -62,7 +61,6 @@ public class ModernTwoPlayerGameView {
 
         // Create scene
         scene = new Scene(root, 1400, 800);
-        scene.getStylesheets().add("/styles/game.css");
 
         // Set up stage
         stage = new Stage();
