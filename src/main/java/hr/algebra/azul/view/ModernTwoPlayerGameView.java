@@ -1,5 +1,6 @@
 package hr.algebra.azul.view;
 
+import hr.algebra.azul.models.TileColor;
 import javafx.animation.*;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -197,6 +198,48 @@ public class ModernTwoPlayerGameView {
         for (int i = 0; i < 5; i++) {
             for (int j = 0; j < 5; j++) {
                 wall.add(createTileSpace(), j, i);
+            }
+        }
+
+        // Define the color pattern for the wall
+        TileColor[][] wallPattern = {
+                {TileColor.BLUE, TileColor.YELLOW, TileColor.RED, TileColor.BLACK, TileColor.WHITE},
+                {TileColor.WHITE, TileColor.BLUE, TileColor.YELLOW, TileColor.RED, TileColor.BLACK},
+                {TileColor.BLACK, TileColor.WHITE, TileColor.BLUE, TileColor.YELLOW, TileColor.RED},
+                {TileColor.RED, TileColor.BLACK, TileColor.WHITE, TileColor.BLUE, TileColor.YELLOW},
+                {TileColor.YELLOW, TileColor.RED, TileColor.BLACK, TileColor.WHITE, TileColor.BLUE}
+        };
+
+        // Create wall grid with color indicators
+        for (int i = 0; i < 5; i++) {
+            for (int j = 0; j < 5; j++) {
+                StackPane tileSpace = new StackPane();
+                Circle baseCircle = new Circle(15);
+                baseCircle.setFill(Color.web("#374151"));
+                baseCircle.setStroke(Color.web("#4B5563"));
+                baseCircle.setStrokeWidth(1);
+
+                // Add color indicator
+                Circle colorIndicator = new Circle(5);
+                colorIndicator.setFill(Color.web(wallPattern[i][j].getHexCode()));
+                colorIndicator.setOpacity(0.5); // Make it subtle
+
+                tileSpace.getChildren().addAll(baseCircle, colorIndicator);
+
+                // Add hover effect to show color more clearly
+                tileSpace.setOnMouseEntered(e -> {
+                    colorIndicator.setOpacity(0.8);
+                    baseCircle.setStroke(Color.web("#60A5FA"));
+                    baseCircle.setStrokeWidth(2);
+                });
+
+                tileSpace.setOnMouseExited(e -> {
+                    colorIndicator.setOpacity(0.5);
+                    baseCircle.setStroke(Color.web("#4B5563"));
+                    baseCircle.setStrokeWidth(1);
+                });
+
+                wall.add(tileSpace, j, i);
             }
         }
 
