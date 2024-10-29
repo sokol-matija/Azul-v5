@@ -1,14 +1,20 @@
 package hr.algebra.azul.view;
 
+import hr.algebra.azul.helper.ParticleSystem;
 import hr.algebra.azul.models.TileColor;
 import javafx.animation.*;
+import javafx.beans.binding.Bindings;
+import javafx.beans.property.IntegerProperty;
+import javafx.beans.property.SimpleIntegerProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.effect.DropShadow;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
+import javafx.scene.shape.Rectangle;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
@@ -18,6 +24,7 @@ public class ModernTwoPlayerGameView {
     private BorderPane root;
 
     // UI Components
+    private final IntegerProperty timeRemaining = new SimpleIntegerProperty(150);
     private HBox topBar;
     private Label timerLabel;
     private Label currentPlayerLabel;
@@ -36,6 +43,8 @@ public class ModernTwoPlayerGameView {
     private GridPane factoriesContainer;
     private VBox centerPool;
 
+    private StackPane player1Progress;
+    private StackPane player2Progress;
     // Style constants
     private static final String DARK_BG = "#111827";
     private static final String DARKER_BG = "#0F172A";
@@ -46,14 +55,12 @@ public class ModernTwoPlayerGameView {
 
     public ModernTwoPlayerGameView() {
         createView();
+        //scene.getStylesheets().add(getClass().getResource("/progress-bar.css").toExternalForm());
     }
 
     private void createView() {
-        // Initialize root container
-//        root = new BorderPane();
-//        root.setStyle(String.format("-fx-background-color: %s;", DARK_BG));
         root = new BorderPane();
-        root.getStylesheets().add(getClass().getResource("/game.css").toExternalForm());
+        root.getStylesheets().add(getClass().getResource("/styles/game.css").toExternalForm());
 
         createTopBar();
         createPlayerBoards();
@@ -61,7 +68,8 @@ public class ModernTwoPlayerGameView {
         createControlBar();
 
         // Create scene
-        scene = new Scene(root, 1400, 800);
+        scene = new Scene(root, 1600, 900);
+        //=ne.getStylesheets().add("/styles/game.css");
 
         // Set up stage
         stage = new Stage();
@@ -80,62 +88,167 @@ public class ModernTwoPlayerGameView {
         topBar.setPadding(new Insets(15, 20, 15, 20));
         topBar.setStyle(String.format("-fx-background-color: %s;", DARKER_BG));
 
-        // Title with gradient effect
+        // Left section - Title
+        HBox leftSection = new HBox(10);
         Label titleLabel = new Label("AZUL");
         titleLabel.setStyle("""
-            -fx-font-size: 24px;
-            -fx-font-weight: bold;
-            -fx-text-fill: linear-gradient(to right, #3B82F6, #8B5CF6);
-            """);
+        -fx-font-size: 24px;
+        -fx-font-weight: bold;
+        -fx-text-fill: linear-gradient(to right, #3B82F6, #8B5CF6);
+        """);
+
+        Label separator = new Label(" • ");
+        separator.setStyle("-fx-text-fill: #9CA3AF;");
 
         Label subtitle = new Label("Two Player Mode");
-        subtitle.setStyle("""
-            -fx-font-size: 14px;
-            -fx-text-fill: #9CA3AF;
-            """);
+        subtitle.setStyle("-fx-font-size: 14px; -fx-text-fill: #9CA3AF;");
 
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
+        leftSection.getChildren().addAll(titleLabel, separator, subtitle);
 
-        // Timer and current player
-        timerLabel = new Label("⏱ 02:30");
-        timerLabel.setStyle("""
-            -fx-font-size: 16px;
-            -fx-text-fill: #9CA3AF;
-            """);
+        // Center section - Turn indicator, timer and progress bar
+        HBox centerSection = new HBox(15);
+        centerSection.setAlignment(Pos.CENTER);
+        HBox.setHgrow(centerSection, Priority.ALWAYS);
+
+        // Create a VBox to stack the turn info and progress bar
+        VBox turnInfo = new VBox(8);
+        turnInfo.setAlignment(Pos.CENTER);
+        turnInfo.setPadding(new Insets(8, 15, 8, 15));
+        turnInfo.setStyle("""
+        -fx-background-color: #1F2937;
+        -fx-background-radius: 5;
+        """);
+
+        // Turn indicator and timer in HBox
+        HBox turnContainer = new HBox(10);
+        turnContainer.setAlignment(Pos.CENTER);
 
         currentPlayerLabel = new Label("Player 1's Turn");
         currentPlayerLabel.setStyle("""
-            -fx-font-size: 16px;
-            -fx-text-fill: #9CA3AF;
-            """);
+        -fx-font-size: 16px;
+        -fx-text-fill: white;
+        """);
 
-        // Settings button
+        timerLabel = new Label("⏱ 02:30");
+        timerLabel.setStyle("""
+        -fx-font-size: 16px;
+        -fx-text-fill: #9CA3AF;
+        """);
+
+        turnContainer.getChildren().addAll(currentPlayerLabel, timerLabel);
+
+        // Add progress bar
+        StackPane timeProgress = createTimeProgressBar();
+        timeProgress.setPrefWidth(200); // Adjust width as needed
+
+        // Add both to the turn info container
+        turnInfo.getChildren().addAll(turnContainer, timeProgress);
+        centerSection.getChildren().add(turnInfo);
+
+        // Right section - Controls
+        HBox rightSection = new HBox(10);
+        rightSection.setAlignment(Pos.CENTER_RIGHT);
+
+        Button helpButton = createHelpButton();
         settingsButton = createIconButton("⚙", "Settings");
 
-        topBar.getChildren().addAll(
-                titleLabel,
-                new Label(" • "),
-                subtitle,
-                spacer,
-                currentPlayerLabel,
-                timerLabel,
-                settingsButton
-        );
+        rightSection.getChildren().addAll(helpButton, settingsButton);
+
+        // Add all sections to the top bar
+        topBar.getChildren().addAll(leftSection, centerSection, rightSection);
 
         root.setTop(topBar);
     }
 
-    private void createPlayerBoards() {
-        // Player 1 Board (Left)
-        player1Board = createPlayerBoard("Player 1", true);
-        VBox.setVgrow(player1Board, Priority.ALWAYS);
+    private StackPane createTimeProgressBar() {
+        StackPane progressContainer = new StackPane();
+        progressContainer.setPrefWidth(300);
+        progressContainer.setMaxWidth(300);
+        progressContainer.setMinHeight(4);
+        progressContainer.setMaxHeight(4);
+        progressContainer.setAlignment(Pos.CENTER_LEFT);
 
-        // Player 2 Board (Right)
+        // Background bar (gray)
+        Rectangle backgroundBar = new Rectangle(300, 4);
+        backgroundBar.setFill(Color.web("#374151"));
+        backgroundBar.setArcWidth(6);
+        backgroundBar.setArcHeight(6);
+
+        // Progress bar
+        Rectangle progressBar = new Rectangle();
+        progressBar.setHeight(4);
+        progressBar.setFill(Color.web("#22C55E")); // Green
+        progressBar.setArcWidth(6);
+        progressBar.setArcHeight(6);
+
+        // Set initial progress bar width to full
+        progressBar.setWidth(300);
+
+        // Bind progressBar width to timeRemaining
+        timeRemaining.addListener((obs, old, newVal) -> {
+            int time = newVal.intValue();
+            // Calculate width based on remaining time (150 seconds total)
+            double width = (time / 150.0) * 300;
+            progressBar.setWidth(width);
+
+            // Update color based on remaining time
+            if (time > 90) { // > 60%
+                progressBar.setFill(Color.web("#22C55E")); // Green
+            } else if (time > 45) { // > 30%
+                progressBar.setFill(Color.web("#F59E0B")); // Yellow
+            } else {
+                progressBar.setFill(Color.web("#EF4444")); // Red
+            }
+        });
+
+        // Timeline to decrement timeRemaining every second
+        Timeline timeline = new Timeline(new KeyFrame(Duration.seconds(1), event -> {
+            if (timeRemaining.get() > 0) {
+                timeRemaining.set(timeRemaining.get() - 1);
+            }
+        }));
+        timeline.setCycleCount(Timeline.INDEFINITE);
+        timeline.play();
+
+        progressContainer.getChildren().addAll(backgroundBar, progressBar);
+        return progressContainer;
+    }
+
+
+
+    private String getColorForProgress(double progress) {
+        if (progress > 0.6) {
+            return "#22C55E"; // Green
+        } else if (progress > 0.3) {
+            return "#F59E0B"; // Yellow/Orange
+        } else {
+            return "#EF4444"; // Red
+        }
+    }
+
+    private void createSparkEffect(Rectangle progressBar) {
+        // Create particle system for sparks
+        ParticleSystem sparkSystem = new ParticleSystem();
+
+        // Update spark position based on progress
+        progressBar.widthProperty().addListener((obs, old, newWidth) -> {
+            sparkSystem.setEmitterLocation(newWidth.doubleValue(), 3);
+        });
+
+        Timeline sparkAnimation = new Timeline(
+                new KeyFrame(Duration.millis(50), e -> sparkSystem.emit())
+        );
+        sparkAnimation.setCycleCount(Timeline.INDEFINITE);
+        sparkAnimation.play();
+    }
+
+    private void createPlayerBoards() {
+        player1Board = createPlayerBoard("Player 1", true);
         player2Board = createPlayerBoard("Player 2", false);
+
+        VBox.setVgrow(player1Board, Priority.ALWAYS);
         VBox.setVgrow(player2Board, Priority.ALWAYS);
 
-        // Add to root
         root.setLeft(player1Board);
         root.setRight(player2Board);
     }
@@ -155,6 +268,39 @@ public class ModernTwoPlayerGameView {
         ));
 
         // Player header
+        HBox header = createPlayerHeader(playerName);
+
+        // Pattern lines
+        VBox patternLines = createPatternLines();
+
+        // Wall grid
+        GridPane wall = new GridPane();
+        wall.setHgap(5);
+        wall.setVgap(5);
+        createWallGrid(wall);
+
+        // Floor line
+        HBox floorLine = createFloorLine();
+
+        // Color legend
+        VBox legend = createColorLegend();
+
+        // Add all components
+        board.getChildren().addAll(
+                header,
+                new Label("Pattern Lines") {{ setStyle("-fx-text-fill: #9CA3AF;"); }},
+                patternLines,
+                new Label("Wall") {{ setStyle("-fx-text-fill: #9CA3AF;"); }},
+                wall,
+                legend,
+                new Label("Floor Line") {{ setStyle("-fx-text-fill: #9CA3AF;"); }},
+                floorLine
+        );
+
+        return board;
+    }
+
+    private HBox createPlayerHeader(String playerName) {
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
 
@@ -178,8 +324,10 @@ public class ModernTwoPlayerGameView {
         HBox.setHgrow(headerSpacer, Priority.ALWAYS);
 
         header.getChildren().addAll(nameLabel, headerSpacer, scoreLabel);
+        return header;
+    }
 
-        // Pattern lines
+    private VBox createPatternLines() {
         VBox patternLines = new VBox(5);
         patternLines.setAlignment(Pos.CENTER_LEFT);
         for (int i = 0; i < 5; i++) {
@@ -190,18 +338,10 @@ public class ModernTwoPlayerGameView {
             }
             patternLines.getChildren().add(row);
         }
+        return patternLines;
+    }
 
-        // Wall grid
-        GridPane wall = new GridPane();
-        wall.setHgap(5);
-        wall.setVgap(5);
-        for (int i = 0; i < 5; i++) {
-            for (int j = 0; j < 5; j++) {
-                wall.add(createTileSpace(), j, i);
-            }
-        }
-
-        // Define the color pattern for the wall
+    private void createWallGrid(GridPane wall) {
         TileColor[][] wallPattern = {
                 {TileColor.BLUE, TileColor.YELLOW, TileColor.RED, TileColor.BLACK, TileColor.WHITE},
                 {TileColor.WHITE, TileColor.BLUE, TileColor.YELLOW, TileColor.RED, TileColor.BLACK},
@@ -210,57 +350,128 @@ public class ModernTwoPlayerGameView {
                 {TileColor.YELLOW, TileColor.RED, TileColor.BLACK, TileColor.WHITE, TileColor.BLUE}
         };
 
-        // Create wall grid with color indicators
         for (int i = 0; i < 5; i++) {
             for (int j = 0; j < 5; j++) {
-                StackPane tileSpace = new StackPane();
-                Circle baseCircle = new Circle(15);
-                baseCircle.setFill(Color.web("#374151"));
-                baseCircle.setStroke(Color.web("#4B5563"));
-                baseCircle.setStrokeWidth(1);
-
-                // Add color indicator
-                Circle colorIndicator = new Circle(5);
-                colorIndicator.setFill(Color.web(wallPattern[i][j].getHexCode()));
-                colorIndicator.setOpacity(0.5); // Make it subtle
-
-                tileSpace.getChildren().addAll(baseCircle, colorIndicator);
-
-                // Add hover effect to show color more clearly
-                tileSpace.setOnMouseEntered(e -> {
-                    colorIndicator.setOpacity(0.8);
-                    baseCircle.setStroke(Color.web("#60A5FA"));
-                    baseCircle.setStrokeWidth(2);
-                });
-
-                tileSpace.setOnMouseExited(e -> {
-                    colorIndicator.setOpacity(0.5);
-                    baseCircle.setStroke(Color.web("#4B5563"));
-                    baseCircle.setStrokeWidth(1);
-                });
-
+                StackPane tileSpace = createWallTileSpace(wallPattern[i][j], i, j);
+                addKeyboardSupport(tileSpace, wallPattern[i][j], i, j);
                 wall.add(tileSpace, j, i);
             }
         }
+    }
 
-        // Floor line
+    private StackPane createWallTileSpace(TileColor color, int row, int col) {
+        StackPane tileSpace = new StackPane();
+        tileSpace.setPrefSize(40, 40);
+        tileSpace.setMinSize(40, 40);
+        tileSpace.setMaxSize(40, 40);
+
+        // Create outer circle for hover stroke
+        Circle outerCircle = new Circle(16);
+        outerCircle.setFill(Color.TRANSPARENT);
+        outerCircle.setStroke(Color.web("#4B5563"));
+        outerCircle.setStrokeWidth(1);
+
+        // Base circle without stroke
+        Circle baseCircle = new Circle(15);
+        baseCircle.setFill(Color.web("#374151"));
+
+        Circle colorIndicator = new Circle(5);
+        colorIndicator.setFill(Color.web(color.getHexCode()));
+        colorIndicator.setOpacity(0.5);
+
+        tileSpace.getChildren().addAll(outerCircle, baseCircle, colorIndicator);
+
+        // Add hover animation
+        addHoverAnimation(tileSpace, colorIndicator, outerCircle, color);
+
+        // Add tooltip
+        Tooltip tooltip = new Tooltip(String.format("Position [%d,%d]: Place %s tile here",
+                row + 1, col + 1, color.toString()));
+        tooltip.setStyle("""
+        -fx-background-color: #1F2937;
+        -fx-text-fill: white;
+        -fx-font-size: 12px;
+        -fx-padding: 8px;
+        """);
+        Tooltip.install(tileSpace, tooltip);
+
+        return tileSpace;
+    }
+
+    private void addHoverAnimation(StackPane tileSpace, Circle colorIndicator, Circle outerCircle, TileColor color) {
+        // Create glow effect
+        DropShadow glow = new DropShadow();
+        glow.setColor(Color.web(color.getHexCode()));
+        glow.setRadius(10);
+        glow.setSpread(0.3);
+
+        // Create fade transitions
+        FadeTransition fadeIn = new FadeTransition(Duration.millis(100), colorIndicator);
+        fadeIn.setToValue(0.8);
+
+        FadeTransition fadeOut = new FadeTransition(Duration.millis(100), colorIndicator);
+        fadeOut.setToValue(0.5);
+
+        tileSpace.setOnMouseEntered(e -> {
+            outerCircle.setStroke(Color.web("#60A5FA"));
+            colorIndicator.setEffect(glow);
+            fadeIn.play();
+        });
+
+        tileSpace.setOnMouseExited(e -> {
+            outerCircle.setStroke(Color.web("#4B5563"));
+            colorIndicator.setEffect(null);
+            fadeOut.play();
+        });
+    }
+
+    private HBox createFloorLine() {
         HBox floorLine = new HBox(5);
         for (int i = 0; i < 7; i++) {
             floorLine.getChildren().add(createTileSpace());
         }
+        return floorLine;
+    }
 
-        // Add all components
-        board.getChildren().addAll(
-                header,
-                new Label("Pattern Lines") {{ setStyle("-fx-text-fill: #9CA3AF;"); }},
-                patternLines,
-                new Label("Wall") {{ setStyle("-fx-text-fill: #9CA3AF;"); }},
-                wall,
-                new Label("Floor Line") {{ setStyle("-fx-text-fill: #9CA3AF;"); }},
-                floorLine
-        );
+    private VBox createColorLegend() {
+        VBox legend = new VBox(5);
+        legend.setStyle("""
+            -fx-background-color: #1F2937;
+            -fx-padding: 10;
+            -fx-background-radius: 5;
+            """);
 
-        return board;
+        Label legendTitle = new Label("Tile Colors");
+        legendTitle.setStyle("""
+            -fx-text-fill: #9CA3AF;
+            -fx-font-size: 12px;
+            -fx-font-weight: bold;
+            """);
+
+        GridPane colorGrid = new GridPane();
+        colorGrid.setHgap(10);
+        colorGrid.setVgap(5);
+
+        int row = 0;
+        for (TileColor color : TileColor.values()) {
+            Circle colorSample = new Circle(6);
+            colorSample.setFill(Color.web(color.getHexCode()));
+            colorSample.setStroke(Color.web("#4B5563"));
+            colorSample.setStrokeWidth(1);
+
+            Label colorName = new Label(color.toString());
+            colorName.setStyle("""
+                -fx-text-fill: #9CA3AF;
+                -fx-font-size: 12px;
+                """);
+
+            colorGrid.add(colorSample, 0, row);
+            colorGrid.add(colorName, 1, row);
+            row++;
+        }
+
+        legend.getChildren().addAll(legendTitle, colorGrid);
+        return legend;
     }
 
     private void createGameCenter() {
@@ -275,10 +486,9 @@ public class ModernTwoPlayerGameView {
         factoriesContainer.setAlignment(Pos.CENTER);
 
         // Create factory displays
-        int factories = 5;
         for (int i = 0; i < 2; i++) {
             for (int j = 0; j < 3; j++) {
-                if (i * 3 + j < factories) {
+                if (i * 3 + j < 5) {
                     factoriesContainer.add(createFactoryDisplay(i * 3 + j), j, i);
                 }
             }
@@ -300,7 +510,6 @@ public class ModernTwoPlayerGameView {
             -fx-background-radius: 10;
             """, CARD_BG));
 
-        // Tiles grid
         GridPane tiles = new GridPane();
         tiles.setHgap(5);
         tiles.setVgap(5);
@@ -325,7 +534,7 @@ public class ModernTwoPlayerGameView {
         pool.setStyle(String.format("""
             -fx-background-color: %s;
             -fx-background-radius: 10;
-            """, CARD_BG));
+            """,CARD_BG));
 
         Label centerLabel = new Label("Center");
         centerLabel.setStyle("-fx-text-fill: #9CA3AF; -fx-font-size: 14px;");
@@ -380,6 +589,66 @@ public class ModernTwoPlayerGameView {
 
         Tooltip.install(button, new Tooltip(tooltip));
         return button;
+    }
+
+    private Button createHelpButton() {
+        Button helpButton = new Button("?");
+        helpButton.setStyle("""
+            -fx-background-color: #374151;
+            -fx-text-fill: #9CA3AF;
+            -fx-font-size: 12px;
+            -fx-min-width: 24px;
+            -fx-min-height: 24px;
+            -fx-background-radius: 12px;
+            """);
+
+        helpButton.setOnAction(e -> showHelpDialog());
+        return helpButton;
+    }
+
+    private void showHelpDialog() {
+        Alert help = new Alert(Alert.AlertType.INFORMATION);
+        help.setTitle("Wall Pattern Help");
+        help.setHeaderText("Understanding the Wall Pattern");
+        help.setContentText("""
+            The wall shows where specific colored tiles can be placed:
+            • Each row must contain one of each color
+            • Each column must contain one of each color
+            • Colors are indicated by the small circles in each space
+            • Hover over any space to see which color tile can be placed there
+            """);
+
+        // Style the dialog
+        DialogPane dialogPane = help.getDialogPane();
+        dialogPane.setStyle("""
+            -fx-background-color: #1F2937;
+            """);
+        dialogPane.lookup(".content.label").setStyle("""
+            -fx-text-fill: #9CA3AF;
+            -fx-font-size: 14px;
+            """);
+        dialogPane.lookup(".header-panel").setStyle("""
+            -fx-background-color: #111827;
+            """);
+        dialogPane.lookup(".header-panel .label").setStyle("""
+            -fx-text-fill: white;
+            -fx-font-size: 18px;
+            -fx-font-weight: bold;
+            """);
+
+        help.showAndWait();
+    }
+
+    private void addKeyboardSupport(StackPane tileSpace, TileColor color, int row, int col) {
+        tileSpace.setFocusTraversable(true);
+        tileSpace.setOnKeyPressed(e -> {
+            switch (e.getCode()) {
+                case ENTER, SPACE -> {
+                    // Handle tile selection
+                    System.out.println("Selected " + color + " position at [" + row + "," + col + "]");
+                }
+            }
+        });
     }
 
     private void addEntranceAnimations() {

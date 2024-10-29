@@ -5,6 +5,8 @@ import hr.algebra.azul.view.ModernTwoPlayerGameView;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
+import javafx.beans.property.IntegerProperty;
+import javafx.beans.property.SimpleIntegerProperty;
 import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
@@ -15,7 +17,7 @@ public class ModernTwoPlayerGameController {
     private GameState gameState;
     private Stage primaryStage;
     private Timeline timer;
-    private int timeRemaining = 150; // 2:30 in seconds
+    private final IntegerProperty timeRemaining = new SimpleIntegerProperty(100); // 2:30 in seconds
     private int currentPlayer = 1;
     private boolean isGamePaused = false;
 
@@ -216,30 +218,33 @@ public class ModernTwoPlayerGameController {
         );
         timer.setCycleCount(Timeline.INDEFINITE);
         timer.play();
+
+        // Ensure timeRemaining is properly initialized
+        if (timeRemaining != null) {
+            timeRemaining.set(150); // Reset to initial value
+        }
     }
 
     private void updateTimer() {
-        if (timeRemaining > 0) {
-            timeRemaining--;
-            int minutes = timeRemaining / 60;
-            int seconds = timeRemaining % 60;
-            Platform.runLater(() ->
-                    view.getTimerLabel().setText(
-                            String.format("⏱ %02d:%02d", minutes, seconds)
-                    )
-            );
+        if (timeRemaining.get() > 0) {
+            Platform.runLater(() -> {
+                timeRemaining.set(timeRemaining.get() - 1);
+                int minutes = timeRemaining.get() / 60;
+                int seconds = timeRemaining.get() % 60;
+                view.getTimerLabel().setText(String.format("⏱ %02d:%02d", minutes, seconds));
 
-            if (timeRemaining == 30) {
-                showTimeWarning();
-            }
+                if (timeRemaining.get() == 30) {
+                    showTimeWarning();
+                }
+            });
         } else {
             timer.stop();
-            handleTimeOut();
+            Platform.runLater(this::handleTimeOut);
         }
     }
 
     private void resetTimer() {
-        timeRemaining = 150;
+        timeRemaining.set(100);
         view.getTimerLabel().setStyle("-fx-text-fill: #9CA3AF;");
     }
 
