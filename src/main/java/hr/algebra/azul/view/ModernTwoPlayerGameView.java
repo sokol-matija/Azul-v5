@@ -2,6 +2,7 @@ package hr.algebra.azul.view;
 
 import hr.algebra.azul.helper.ParticleSystem;
 import hr.algebra.azul.models.TileColor;
+import hr.algebra.azul.models.Wall;
 import javafx.animation.*;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.IntegerProperty;
@@ -11,6 +12,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.effect.DropShadow;
+import javafx.scene.effect.InnerShadow;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
@@ -22,6 +24,8 @@ public class ModernTwoPlayerGameView {
     private Stage stage;
     private Scene scene;
     private BorderPane root;
+    private StackPane animationLayer;
+
 
     // UI Components
     private final IntegerProperty timeRemaining = new SimpleIntegerProperty(150);
@@ -32,6 +36,8 @@ public class ModernTwoPlayerGameView {
     private VBox player2Board;
     private VBox gameCenter;
     private HBox controlBar;
+    private HBox player1Hand;
+    private HBox player2Hand;
 
     // Game Controls
     private Button undoButton;
@@ -61,21 +67,33 @@ public class ModernTwoPlayerGameView {
     private void createView() {
         root = new BorderPane();
         root.getStylesheets().add(getClass().getResource("/styles/game.css").toExternalForm());
+        root.setStyle(String.format("-fx-background-color: %s; -fx-padding: 0;", DARK_BG));
 
+
+        animationLayer = new StackPane();
+        animationLayer.setMouseTransparent(true);
+        animationLayer.setPickOnBounds(false);
+        // Create scene with just the root first
+        scene = new Scene(root, 1600, 1060);
+
+        // Initialize animation layer
+        StackPane rootContainer = new StackPane();
+        rootContainer.getChildren().addAll(root, animationLayer);
+
+        // Create scene with rootContainer instead of root
+        scene = new Scene(rootContainer, 1600, 900);
+
+        // Create all UI components
         createTopBar();
         createPlayerBoards();
         createGameCenter();
         createControlBar();
 
-        // Create scene
-        scene = new Scene(root, 1600, 900);
-        //=ne.getStylesheets().add("/styles/game.css");
-
         // Set up stage
         stage = new Stage();
         stage.setTitle("Azul - Two Player Mode");
         stage.setMinWidth(1200);
-        stage.setMinHeight(700);
+        stage.setMinHeight(900);
         stage.setScene(scene);
 
         // Add entrance animations
@@ -246,11 +264,45 @@ public class ModernTwoPlayerGameView {
         player1Board = createPlayerBoard("Player 1", true);
         player2Board = createPlayerBoard("Player 2", false);
 
+        // Create hands for each player
+        player1Hand = createPlayerHand();
+        player2Hand = createPlayerHand();
+
+        // Add hands to player boards
+        ((VBox)player1Board).getChildren().add(2, createHandSection(player1Hand)); // Add after header
+        ((VBox)player2Board).getChildren().add(2, createHandSection(player2Hand));
+
         VBox.setVgrow(player1Board, Priority.ALWAYS);
         VBox.setVgrow(player2Board, Priority.ALWAYS);
 
         root.setLeft(player1Board);
         root.setRight(player2Board);
+    }
+
+    private HBox createPlayerHand() {
+        HBox hand = new HBox(5);
+        hand.setAlignment(Pos.CENTER_LEFT);
+        hand.setPadding(new Insets(10));
+        hand.setMinHeight(50);
+        hand.setStyle("""
+            -fx-background-color: #374151;
+            -fx-background-radius: 5;
+            -fx-border-color: #4B5563;
+            -fx-border-radius: 5;
+            -fx-border-width: 1;
+            """);
+        return hand;
+    }
+
+    private VBox createHandSection(HBox hand) {
+        VBox handSection = new VBox(5);
+        handSection.setPadding(new Insets(10));
+
+        Label handLabel = new Label("Selected Tiles");
+        handLabel.setStyle("-fx-text-fill: #9CA3AF; -fx-font-size: 12px;");
+
+        handSection.getChildren().addAll(handLabel, hand);
+        return handSection;
     }
 
     private VBox createPlayerBoard(String playerName, boolean isActive) {
@@ -342,13 +394,8 @@ public class ModernTwoPlayerGameView {
     }
 
     private void createWallGrid(GridPane wall) {
-        TileColor[][] wallPattern = {
-                {TileColor.BLUE, TileColor.YELLOW, TileColor.RED, TileColor.BLACK, TileColor.WHITE},
-                {TileColor.WHITE, TileColor.BLUE, TileColor.YELLOW, TileColor.RED, TileColor.BLACK},
-                {TileColor.BLACK, TileColor.WHITE, TileColor.BLUE, TileColor.YELLOW, TileColor.RED},
-                {TileColor.RED, TileColor.BLACK, TileColor.WHITE, TileColor.BLUE, TileColor.YELLOW},
-                {TileColor.YELLOW, TileColor.RED, TileColor.BLACK, TileColor.WHITE, TileColor.BLUE}
-        };
+        Wall wallModel = new Wall();
+        TileColor[][] wallPattern = wallModel.initializeWallPattern();
 
         for (int i = 0; i < 5; i++) {
             for (int j = 0; j < 5; j++) {
@@ -505,18 +552,30 @@ public class ModernTwoPlayerGameView {
         VBox factory = new VBox(10);
         factory.setAlignment(Pos.CENTER);
         factory.setPadding(new Insets(15));
+        factory.setPrefSize(120, 120); // Set fixed size for factory
         factory.setStyle(String.format("""
             -fx-background-color: %s;
             -fx-background-radius: 10;
             """, CARD_BG));
 
+        // Create grid for tiles (2x2)
         GridPane tiles = new GridPane();
-        tiles.setHgap(5);
-        tiles.setVgap(5);
+        tiles.setHgap(10);
+        tiles.setVgap(10);
+        tiles.setAlignment(Pos.CENTER);
 
-        for (int i = 0; i < 2; i++) {
-            for (int j = 0; j < 2; j++) {
-                tiles.add(createTileSpace(), j, i);
+        // Create 4 tile spaces (2x2 grid)
+        for (int row = 0; row < 2; row++) {
+            for (int col = 0; col < 2; col++) {
+                Circle tileSpace = new Circle(15);
+                tileSpace.setFill(Color.web("#374151")); // Empty tile color
+                tileSpace.setStroke(Color.web("#4B5563"));
+                tileSpace.setStrokeWidth(1);
+
+                // Add some effect to make it look more like a tile space
+                tileSpace.setEffect(new InnerShadow(5, Color.web("#000000", 0.2)));
+
+                tiles.add(tileSpace, col, row);
             }
         }
 
@@ -694,4 +753,7 @@ public class ModernTwoPlayerGameView {
     public VBox getPlayer2Board() { return player2Board; }
     public GridPane getFactoriesContainer() { return factoriesContainer; }
     public VBox getCenterPool() { return centerPool; }
+    public HBox getPlayer1Hand() { return player1Hand; }
+    public HBox getPlayer2Hand() { return player2Hand; }
+    public StackPane getAnimationLayer() { return animationLayer; }
 }
