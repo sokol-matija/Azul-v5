@@ -253,6 +253,18 @@ public class GameModel implements Serializable {
         }
     }
 
+    public void setPlayerTurn(Player player) {
+        if (!players.contains(player)) {
+            throw new IllegalArgumentException("Player must be part of the game");
+        }
+        this.currentPlayer = player;
+    }
+
+    public void nextTurn() {
+        int currentIndex = players.indexOf(currentPlayer);
+        currentPlayer = players.get((currentIndex + 1) % players.size());
+    }
+
     public void addTilesToCenter(List<Tile> tiles) {
         centerPool.addAll(tiles);
     }

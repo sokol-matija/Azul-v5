@@ -2,71 +2,186 @@ package hr.algebra.azul.helper;
 
 import hr.algebra.azul.models.*;
 import hr.algebra.azul.view.ModernTwoPlayerGameView;
-import javafx.animation.ScaleTransition;
+import javafx.animation.ParallelTransition;
+import javafx.animation.PathTransition;
+import javafx.animation.PauseTransition;
+import javafx.application.Platform;
+import javafx.geometry.Bounds;
 import javafx.scene.Node;
-import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
+import javafx.scene.shape.LineTo;
+import javafx.scene.shape.MoveTo;
+import javafx.scene.shape.Path;
 import javafx.util.Duration;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class PatternLineInteractionHandler {
     private final ModernTwoPlayerGameView view;
     private final GameModel gameModel;
-    private static final String VALID_PLACEMENT = """
-            -fx-border-color: #22C55E;
-            -fx-border-width: 2;
-            -fx-border-radius: 5;
-            -fx-padding: 2;
-            """;
-    private static final String INVALID_PLACEMENT = """
-            -fx-border-color: #EF4444;
-            -fx-border-width: 2;
-            -fx-border-radius: 5;
-            -fx-padding: 2;
-            """;
-    private static final String NO_HIGHLIGHT = "";
-    private static final double HIGHLIGHT_SCALE = 1.1;
-    private static final double NORMAL_SCALE = 1.0;
-    private static final int ANIMATION_DURATION_MS = 100;
+    private final TurnManager turnManager;
 
-    public PatternLineInteractionHandler(ModernTwoPlayerGameView view, GameModel gameModel) {
+    public PatternLineInteractionHandler(ModernTwoPlayerGameView view, GameModel gameModel, TurnManager turnManager) {
         this.view = view;
         this.gameModel = gameModel;
+        this.turnManager = turnManager;
     }
 
     public void setupPatternLineInteractions() {
-        if (!hasActiveTiles()) return;
+        setupPlayerPatternLines(view.getPlayer1Board());
+        setupPlayerPatternLines(view.getPlayer2Board());
+    }
 
-        // Find pattern lines container in current player's board
-        VBox patternLinesContainer = findPatternLinesContainer(getCurrentPlayerBoard());
+    private void setupPlayerPatternLines(VBox playerBoard) {
+        VBox patternLinesContainer = findPatternLinesContainer(playerBoard);
         if (patternLinesContainer == null) return;
 
-        // Get color of tiles in hand
-        TileColor selectedColor = getSelectedTileColor();
-        if (selectedColor == null) return;
-
-        // Setup interactions for each pattern line
-        setupPatternLineHandlers(patternLinesContainer, selectedColor);
-
-        // Disable factory interactions while tiles are in hand
-        disableFactoryInteractions();
+        // Skip the label and get the pattern lines container
+        for (int i = 1; i < patternLinesContainer.getChildren().size(); i++) {
+            Node node = patternLinesContainer.getChildren().get(i);
+            if (node instanceof HBox patternLine) {
+                final int lineIndex = i - 1; // Adjust index to account for label
+                patternLine.setOnMouseClicked(e -> handlePatternLineClick(lineIndex, playerBoard));
+            }
+        }
     }
 
-    private boolean hasActiveTiles() {
+    public void handlePatternLineClick(int lineIndex, VBox playerBoard) {
+        // Only handle clicks for the current player's board
+        if ((gameModel.getCurrentPlayer() == gameModel.getPlayers().get(0) && playerBoard != view.getPlayer1Board()) ||
+                (gameModel.getCurrentPlayer() == gameModel.getPlayers().get(1) && playerBoard != view.getPlayer2Board())) {
+            return;
+        }
+
         HBox playerHand = getCurrentPlayerHand();
-        return playerHand != null && !playerHand.getChildren().isEmpty();
+        if (playerHand.getChildren().isEmpty()) {
+            return; // No tiles selected
+        }
+
+        // Get the first tile's color from the hand (all tiles should be same color)
+        TileColor selectedColor = null;
+        List<Tile> selectedTiles = new ArrayList<>();
+
+        for (Node node : playerHand.getChildren()) {
+            if (node instanceof Circle circle) {
+                Color fillColor = (Color) circle.getFill();
+                TileColor tileColor = getTileColorFromFill(fillColor);
+                if (tileColor != null) {
+                    selectedColor = tileColor;
+                    selectedTiles.add(new Tile(tileColor));
+                }
+            }
+        }
+
+        if (selectedTiles.isEmpty() || selectedColor == null) return;
+
+        // Check if placement is valid
+        PatternLine targetLine = gameModel.getCurrentPlayer().getPatternLines().get(lineIndex);
+        if (!isValidPlacement(targetLine, selectedColor, lineIndex)) {
+            return;
+        }
+
+        // Animate and place tiles
+        animateTilesToPatternLine(playerHand, lineIndex, selectedTiles, playerBoard);
     }
 
-    private VBox getCurrentPlayerBoard() {
-        return gameModel.getCurrentPlayer() == gameModel.getPlayers().get(0)
-                ? view.getPlayer1Board()
-                : view.getPlayer2Board();
+    private boolean isValidPlacement(PatternLine targetLine, TileColor color, int lineIndex) {
+        // Check if line already has different color
+        if (!targetLine.isEmpty() && targetLine.getColor() != color) {
+            return false;
+        }
+
+        // Check if the wall already has this color in the corresponding row
+        Wall wall = gameModel.getCurrentPlayer().getWall();
+        if (wall.hasColor(lineIndex, color)) {
+            return false;
+        }
+
+        // Check if line is full
+        return !targetLine.isFull();
+    }
+
+    private void animateTilesToPatternLine(HBox hand, int lineIndex, List<Tile> tiles, VBox playerBoard) {
+        VBox patternLinesContainer = findPatternLinesContainer(playerBoard);
+        if (patternLinesContainer == null) return;
+
+        HBox targetLine = (HBox) patternLinesContainer.getChildren().get(lineIndex + 1);
+
+        ParallelTransition allAnimations = new ParallelTransition();
+
+        for (Node tileNode : hand.getChildren()) {
+            PathTransition path = createPathTransition(hand, targetLine, tileNode);
+            allAnimations.getChildren().add(path);
+        }
+
+        allAnimations.setOnFinished(e -> {
+            // Clear the hand
+            hand.getChildren().clear();
+
+            // Add tiles to pattern line in the model
+            PatternLine patternLine = gameModel.getCurrentPlayer().getPatternLines().get(lineIndex);
+            patternLine.addTiles(tiles);
+
+            // Handle overflow if any
+            List<Tile> overflow = calculateOverflow(tiles, patternLine);
+            if (!overflow.isEmpty()) {
+                gameModel.getCurrentPlayer().getFloorLine().addTiles(overflow);
+            }
+
+            // Update the view
+            updatePatternLines();
+
+            // End turn after successful placement
+            Platform.runLater(() -> {
+                PauseTransition pause = new PauseTransition(Duration.millis(300));
+                pause.setOnFinished(event -> turnManager.handleEndTurn());
+                pause.play();
+            });
+        });
+
+        allAnimations.play();
+    }
+
+    private PathTransition createPathTransition(Node source, Node target, Node movingNode) {
+        Bounds sourceBounds = source.localToScene(source.getBoundsInLocal());
+        Bounds targetBounds = target.localToScene(target.getBoundsInLocal());
+
+        Path path = new Path();
+        path.getElements().add(new MoveTo(
+                sourceBounds.getCenterX(),
+                sourceBounds.getCenterY()
+        ));
+        path.getElements().add(new LineTo(
+                targetBounds.getCenterX(),
+                targetBounds.getCenterY()
+        ));
+
+        PathTransition transition = new PathTransition(Duration.millis(500), path, movingNode);
+        transition.setAutoReverse(false);
+
+        return transition;
+    }
+
+    private List<Tile> calculateOverflow(List<Tile> tiles, PatternLine targetLine) {
+        List<Tile> overflow = new ArrayList<>();
+        int availableSpace = targetLine.getSize() - targetLine.getTiles().size();
+
+        if (tiles.size() > availableSpace) {
+            overflow.addAll(tiles.subList(availableSpace, tiles.size()));
+        }
+
+        return overflow;
+    }
+
+    public VBox findPatternLinesContainer(VBox playerBoard) {
+        return (VBox) playerBoard.getChildren().stream()
+                .filter(node -> node instanceof VBox)
+                .findFirst()
+                .orElse(null);
     }
 
     private HBox getCurrentPlayerHand() {
@@ -75,140 +190,37 @@ public class PatternLineInteractionHandler {
                 : view.getPlayer2Hand();
     }
 
-    public VBox findPatternLinesContainer(VBox playerBoard) {
-        for (Node node : playerBoard.getChildren()) {
-            if (node instanceof VBox container) {
-                // Look for the VBox that contains the "Pattern Lines" label
-                boolean isPatternLinesContainer = container.getChildren().stream()
-                        .anyMatch(child -> child instanceof Label &&
-                                ((Label) child).getText().equals("Pattern Lines"));
-                if (isPatternLinesContainer) {
-                    return container;
-                }
-            }
-        }
-        return null;
-    }
-
-    private void setupPatternLineHandlers(VBox patternLinesContainer, TileColor selectedColor) {
-        // Skip the label at index 0
-        for (int i = 1; i <= 5; i++) {
-            final int lineIndex = i - 1;
-            if (patternLinesContainer.getChildren().get(i) instanceof HBox patternLine) {
-                setupSinglePatternLineHandler(patternLine, lineIndex, selectedColor);
-            }
-        }
-    }
-
-    private void setupSinglePatternLineHandler(HBox patternLine, int lineIndex, TileColor selectedColor) {
-        boolean isValidPlacement = validatePlacement(lineIndex, selectedColor);
-
-        // Clear existing handlers
-        removePatternLineInteractions(patternLine);
-
-        if (isValidPlacement) {
-            setupValidPatternLineInteraction(patternLine, lineIndex);
-        } else {
-            setupInvalidPatternLineInteraction(patternLine);
-        }
-    }
-
-    private boolean validatePlacement(int lineIndex, TileColor selectedColor) {
-        Player currentPlayer = gameModel.getCurrentPlayer();
-        PatternLine patternLine = currentPlayer.getPatternLines().get(lineIndex);
-
-        // Check if pattern line is full
-        if (patternLine.isFull()) {
-            return false;
-        }
-
-        // Check if pattern line already has different color
-        if (!patternLine.isEmpty() && patternLine.getColor() != selectedColor) {
-            return false;
-        }
-
-        // Check if wall already has this color in the corresponding row
-        return !currentPlayer.getWall().hasColor(lineIndex, selectedColor);
-    }
-
-    private void setupValidPatternLineInteraction(HBox patternLine, int lineIndex) {
-        patternLine.setOnMouseEntered(e -> {
-            patternLine.setStyle(VALID_PLACEMENT);
-            animatePatternLine(patternLine, HIGHLIGHT_SCALE);
-        });
-
-        patternLine.setOnMouseExited(e -> {
-            patternLine.setStyle(NO_HIGHLIGHT);
-            animatePatternLine(patternLine, NORMAL_SCALE);
-        });
-
-        patternLine.setOnMouseClicked(e -> handlePatternLineClick(lineIndex));
-    }
-
-    private void setupInvalidPatternLineInteraction(HBox patternLine) {
-        patternLine.setOnMouseEntered(e -> patternLine.setStyle(INVALID_PLACEMENT));
-        patternLine.setOnMouseExited(e -> patternLine.setStyle(NO_HIGHLIGHT));
-    }
-
-    private void animatePatternLine(HBox patternLine, double scale) {
-        patternLine.getChildren().forEach(node -> {
-            if (node instanceof Circle) {
-                ScaleTransition scaleTransition = new ScaleTransition(
-                        Duration.millis(ANIMATION_DURATION_MS), node);
-                scaleTransition.setToX(scale);
-                scaleTransition.setToY(scale);
-                scaleTransition.play();
-            }
+    private void updatePatternLines() {
+        Platform.runLater(() -> {
+            updatePlayerPatternLines(view.getPlayer1Board(), gameModel.getPlayers().get(0));
+            updatePlayerPatternLines(view.getPlayer2Board(), gameModel.getPlayers().get(1));
         });
     }
 
-    private void handlePatternLineClick(int lineIndex) {
-        if (!hasActiveTiles()) return;
+    private void updatePlayerPatternLines(VBox playerBoard, Player player) {
+        VBox patternLinesContainer = findPatternLinesContainer(playerBoard);
+        if (patternLinesContainer == null) return;
 
-        TileColor selectedColor = getSelectedTileColor();
-        if (selectedColor == null) return;
+        List<PatternLine> playerPatternLines = player.getPatternLines();
 
-        Player currentPlayer = gameModel.getCurrentPlayer();
-        PatternLine targetLine = currentPlayer.getPatternLines().get(lineIndex);
-
-        // Create tiles from hand
-        List<Tile> tilesFromHand = createTilesFromHand(selectedColor);
-
-        // Try to place tiles
-        if (targetLine.addTiles(tilesFromHand)) {
-            // Handle overflow
-            handleOverflow(tilesFromHand, targetLine);
-
-            // Clear hand and update UI
-            getCurrentPlayerHand().getChildren().clear();
-            updatePatternLines();
-            updateFloorLine();
-            clearAllPatternLineInteractions();
-            enableFactoryInteractions();
+        // Start from index 1 to skip the label
+        for (int i = 1; i <= playerPatternLines.size(); i++) {
+            HBox lineContainer = (HBox) patternLinesContainer.getChildren().get(i);
+            PatternLine patternLine = playerPatternLines.get(i - 1);
+            updateSinglePatternLine(lineContainer, patternLine);
         }
     }
 
-    private List<Tile> createTilesFromHand(TileColor color) {
-        HBox hand = getCurrentPlayerHand();
-        List<Tile> tiles = new ArrayList<>();
-        hand.getChildren().forEach(node -> tiles.add(new Tile(color)));
-        return tiles;
-    }
-
-    private void handleOverflow(List<Tile> tiles, PatternLine targetLine) {
-        int availableSpace = targetLine.getSize() - targetLine.getTiles().size() + tiles.size();
-        if (availableSpace > targetLine.getSize()) {
-            List<Tile> overflow = tiles.subList(targetLine.getSize(), tiles.size());
-            gameModel.getCurrentPlayer().getFloorLine().addTiles(overflow);
+    private void updateSinglePatternLine(HBox lineContainer, PatternLine patternLine) {
+        List<Tile> tiles = patternLine.getTiles();
+        for (int i = 0; i < lineContainer.getChildren().size(); i++) {
+            Circle space = (Circle) lineContainer.getChildren().get(i);
+            if (i < tiles.size()) {
+                space.setFill(Color.web(tiles.get(i).getColor().getHexCode()));
+            } else {
+                space.setFill(Color.web("#374151")); // Empty space color
+            }
         }
-    }
-
-    private TileColor getSelectedTileColor() {
-        HBox hand = getCurrentPlayerHand();
-        if (hand.getChildren().isEmpty()) return null;
-
-        Circle firstTile = (Circle) hand.getChildren().get(0);
-        return getTileColorFromFill((Color) firstTile.getFill());
     }
 
     private TileColor getTileColorFromFill(Color fillColor) {
@@ -223,68 +235,5 @@ public class PatternLineInteractionHandler {
             }
         }
         return null;
-    }
-
-    private void updatePatternLines() {
-        VBox patternLinesContainer = findPatternLinesContainer(getCurrentPlayerBoard());
-        if (patternLinesContainer == null) return;
-
-        List<PatternLine> patternLines = gameModel.getCurrentPlayer().getPatternLines();
-
-        // Skip label at index 0
-        for (int i = 1; i <= patternLines.size(); i++) {
-            if (patternLinesContainer.getChildren().get(i) instanceof HBox lineView) {
-                updateSinglePatternLine(lineView, patternLines.get(i - 1));
-            }
-        }
-    }
-
-    private void updateSinglePatternLine(HBox lineView, PatternLine patternLine) {
-        List<Circle> circles = lineView.getChildren().stream()
-                .filter(node -> node instanceof Circle)
-                .map(node -> (Circle) node)
-                .collect(Collectors.toList());
-
-        List<Tile> tiles = patternLine.getTiles();
-        for (int i = 0; i < circles.size(); i++) {
-            Circle circle = circles.get(i);
-            if (i < tiles.size()) {
-                circle.setFill(Color.web(tiles.get(i).getColor().getHexCode()));
-            } else {
-                circle.setFill(Color.web("#374151")); // Empty space color
-            }
-        }
-    }
-
-    private void updateFloorLine() {
-        // TODO: Implement floor line update logic
-    }
-
-    private void disableFactoryInteractions() {
-        view.getFactoriesContainer().setDisable(true);
-    }
-
-    private void enableFactoryInteractions() {
-        view.getFactoriesContainer().setDisable(false);
-    }
-
-    private void removePatternLineInteractions(HBox patternLine) {
-        patternLine.setOnMouseEntered(null);
-        patternLine.setOnMouseExited(null);
-        patternLine.setOnMouseClicked(null);
-        patternLine.setStyle(NO_HIGHLIGHT);
-        animatePatternLine(patternLine, NORMAL_SCALE);
-    }
-
-    public void clearAllPatternLineInteractions() {
-        VBox patternLinesContainer = findPatternLinesContainer(getCurrentPlayerBoard());
-        if (patternLinesContainer == null) return;
-
-        // Skip label at index 0
-        for (int i = 1; i <= 5; i++) {
-            if (patternLinesContainer.getChildren().get(i) instanceof HBox patternLine) {
-                removePatternLineInteractions(patternLine);
-            }
-        }
     }
 }
