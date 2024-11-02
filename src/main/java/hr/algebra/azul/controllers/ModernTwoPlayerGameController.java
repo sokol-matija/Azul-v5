@@ -3,10 +3,7 @@ package hr.algebra.azul.controllers;
 import hr.algebra.azul.helper.TileAnimationManager;
 import hr.algebra.azul.models.*;
 import hr.algebra.azul.view.ModernTwoPlayerGameView;
-import javafx.animation.KeyFrame;
-import javafx.animation.ParallelTransition;
-import javafx.animation.PathTransition;
-import javafx.animation.Timeline;
+import javafx.animation.*;
 import javafx.application.Platform;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleIntegerProperty;
@@ -14,6 +11,7 @@ import javafx.geometry.Bounds;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
+import javafx.scene.effect.DropShadow;
 import javafx.scene.effect.InnerShadow;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
@@ -81,14 +79,6 @@ public class ModernTwoPlayerGameController {
         view.getSettingsButton().setOnAction(e -> handleSettingsClick());
     }
 
-    private void setupFactoryClickHandlers() {
-        GridPane factoriesGrid = view.getFactoriesContainer();
-        for (int i = 0; i < factoriesGrid.getChildren().size(); i++) {
-            final int factoryIndex = i;
-            VBox factory = (VBox) factoriesGrid.getChildren().get(i);
-            factory.setOnMouseClicked(e -> handleFactoryClick(factoryIndex, factory));
-        }
-    }
 
     private void setupPatternLineHandlers() {
         setupPlayerPatternLines(view.getPlayer1Board());
@@ -125,42 +115,50 @@ public class ModernTwoPlayerGameController {
         return null;
     }
 
-    private void handleFactoryClick(int factoryIndex, VBox factoryNode) {
+    private void handleFactoryClick(Circle clickedTile, VBox factory, int factoryIndex) {
         if (isGamePaused) return;
 
-        List<Tile> factoryTiles = gameModel.getFactories().get(factoryIndex);
-        if (factoryTiles.isEmpty()) return;
+        // Get the color of the clicked tile
+        Color tileColor = (Color) clickedTile.getFill();
+        Factory factoryModel = gameModel.getFactories().get(factoryIndex);
 
-        // Get the first tile's color
-        TileColor selectedColor = factoryTiles.get(0).getColor();
+        // Get tiles of the selected color
+        List<Tile> selectedTiles = factoryModel.selectTilesByColor(getTileColorFromFill(tileColor));
+        List<Tile> remainingTiles = factoryModel.removeRemainingTiles();
 
-        // Split tiles into selected and remaining
-        List<Tile> selectedTiles = factoryTiles.stream()
-                .filter(tile -> tile.getColor() == selectedColor)
-                .collect(Collectors.toList());
-
-        List<Tile> remainingTiles = factoryTiles.stream()
-                .filter(tile -> tile.getColor() != selectedColor)
-                .collect(Collectors.toList());
-
-        // Clear the factory immediately
-        gameModel.getFactories().get(factoryIndex).clear();
+        // Get the current player's hand
+        HBox playerHand = getCurrentPlayerHand();
 
         // Start animation
         animationManager.animateFactorySelection(
-                factoryNode,
+                factory,
                 selectedTiles,
                 remainingTiles,
-                getCurrentPlayerHand(),
+                playerHand,
                 view.getCenterPool(),
                 () -> {
                     // Update model and UI after animation completes
                     updatePlayerHand(selectedTiles);
-                    gameModel.moveTilesToCenter(remainingTiles);
-                    updateFactoryDisplay(factoryNode);
+                    gameModel.addTilesToCenter(remainingTiles);
+                    updateFactoryDisplay(factory);
                     updateCenterPool();
                 }
         );
+    }
+
+    private void setupFactoryClickHandlers() {
+        GridPane factoriesGrid = view.getFactoriesContainer();
+        for (int i = 0; i < factoriesGrid.getChildren().size(); i++) {
+            final int factoryIndex = i;
+            VBox factory = (VBox) factoriesGrid.getChildren().get(i);
+            GridPane tileGrid = (GridPane) factory.getChildren().get(0);
+
+            for (Node node : tileGrid.getChildren()) {
+                if (node instanceof Circle tile) {
+                    tile.setOnMouseClicked(e -> handleFactoryClick(tile, factory, factoryIndex));
+                }
+            }
+        }
     }
 
     private void animateSelectionAndMove(VBox factoryNode, List<Tile> selectedTiles, List<Tile> remainingTiles) {
@@ -200,7 +198,7 @@ public class ModernTwoPlayerGameController {
         // After animations complete
         allAnimations.setOnFinished(e -> {
             updatePlayerHand(selectedTiles);
-            gameModel.moveTilesToCenter(remainingTiles);
+            gameModel.addTilesToCenter(remainingTiles);
             updateFactoryDisplay(factoryNode);
             updateCenterPool();
         });
@@ -406,17 +404,21 @@ public class ModernTwoPlayerGameController {
     }
 
     private TileColor getTileColorFromFill(Color fillColor) {
+        // Convert the JavaFX color to hex format
         String hexColor = String.format("#%02X%02X%02X",
                 (int) (fillColor.getRed() * 255),
                 (int) (fillColor.getGreen() * 255),
                 (int) (fillColor.getBlue() * 255));
 
-//        return Arrays.stream(TileColor.values())
-//                .filter(color -> color.getHexCode().equalsIgnoreCase(hexColor))
-//                .findFirst()
-//                .orElse(null);
-        // TODO: Implement getTileColorFromFill method
-        return  TileColor.BLUE;
+        // Match with TileColor enum
+        for (TileColor color : TileColor.values()) {
+            if (color.getHexCode().equalsIgnoreCase(hexColor)) {
+                return color;
+            }
+        }
+
+        System.out.println("Warning: No matching TileColor found for " + hexColor);
+        return null;
     }
 
     private void updateEntireView() {
@@ -431,26 +433,38 @@ public class ModernTwoPlayerGameController {
     }
 
     private void updateFactories() {
-        List<List<Tile>> factories = gameModel.getFactories();
+        List<Factory> factories = gameModel.getFactories();
         GridPane factoriesGrid = view.getFactoriesContainer();
 
         for (int i = 0; i < factories.size(); i++) {
+            Factory factory = factories.get(i);
             VBox factoryBox = (VBox) factoriesGrid.getChildren().get(i);
             GridPane tileGrid = (GridPane) factoryBox.getChildren().get(0);
-            List<Tile> factoryTiles = factories.get(i);
+            List<Tile> factoryTiles = factory.getTiles();
 
             // Clear existing tiles
             tileGrid.getChildren().clear();
 
+            // Create and store the tile circles for this factory
+            List<Circle> factoryCircles = new ArrayList<>();
+
             // Add new tiles
             int tileIndex = 0;
+            final int factoryIndex = i;
             for (int row = 0; row < 2; row++) {
                 for (int col = 0; col < 2; col++) {
                     Circle tileCircle = new Circle(15);
 
                     if (tileIndex < factoryTiles.size()) {
                         Tile tile = factoryTiles.get(tileIndex);
-                        tileCircle.setFill(Color.web(tile.getColor().getHexCode()));
+                        Color tileColor = Color.web(tile.getColor().getHexCode());
+                        tileCircle.setFill(tileColor);
+
+                        // Add hover effects
+                        setupTileHoverEffects(tileCircle, tileColor, factoryBox, tileGrid);
+
+                        // Add click handler for non-empty tiles
+                        tileCircle.setOnMouseClicked(e -> handleFactoryClick(tileCircle, factoryBox, factoryIndex));
                     } else {
                         tileCircle.setFill(Color.web("#374151")); // Empty tile color
                     }
@@ -459,11 +473,79 @@ public class ModernTwoPlayerGameController {
                     tileCircle.setStrokeWidth(1);
                     tileCircle.setEffect(new InnerShadow(5, Color.web("#000000", 0.2)));
 
+                    factoryCircles.add(tileCircle);
                     tileGrid.add(tileCircle, col, row);
                     tileIndex++;
                 }
             }
         }
+    }
+
+    private void setupTileHoverEffects(Circle tileCircle, Color tileColor, VBox factoryBox, GridPane tileGrid) {
+        // Create glow effect for hover
+        DropShadow glow = new DropShadow();
+        glow.setColor(tileColor);
+        glow.setRadius(10);
+        glow.setSpread(0.3);
+
+        tileCircle.setOnMouseEntered(e -> {
+            // Highlight the factory box
+            factoryBox.setStyle(String.format("""
+            -fx-background-color: %s;
+            -fx-background-radius: 10;
+            -fx-border-color: #60A5FA;
+            -fx-border-width: 2;
+            -fx-border-radius: 10;
+            """, CARD_BG));
+
+            // Highlight all tiles of the same color
+            for (Node node : tileGrid.getChildren()) {
+                if (node instanceof Circle circle) {
+                    if (circle.getFill().equals(tileColor)) {
+                        // Scale up effect
+                        ScaleTransition scale = new ScaleTransition(Duration.millis(100), circle);
+                        scale.setToX(1.1);
+                        scale.setToY(1.1);
+                        scale.play();
+
+                        // Add glow effect
+                        circle.setEffect(glow);
+
+                        // Add highlight stroke
+                        circle.setStroke(Color.web("#60A5FA"));
+                        circle.setStrokeWidth(2);
+                    }
+                }
+            }
+        });
+
+        tileCircle.setOnMouseExited(e -> {
+            // Reset factory box style
+            factoryBox.setStyle(String.format("""
+            -fx-background-color: %s;
+            -fx-background-radius: 10;
+            """, CARD_BG));
+
+            // Reset all tiles
+            for (Node node : tileGrid.getChildren()) {
+                if (node instanceof Circle circle) {
+                    if (circle.getFill().equals(tileColor)) {
+                        // Scale down effect
+                        ScaleTransition scale = new ScaleTransition(Duration.millis(100), circle);
+                        scale.setToX(1.0);
+                        scale.setToY(1.0);
+                        scale.play();
+
+                        // Reset effect
+                        circle.setEffect(new InnerShadow(5, Color.web("#000000", 0.2)));
+
+                        // Reset stroke
+                        circle.setStroke(Color.web("#4B5563"));
+                        circle.setStrokeWidth(1);
+                    }
+                }
+            }
+        });
     }
     private void updateCenterPool() {
         VBox centerPool = view.getCenterPool();
@@ -533,8 +615,9 @@ public class ModernTwoPlayerGameController {
     private void updateSinglePatternLine(HBox lineContainer, PatternLine patternLine) {
         for (int j = 0; j < lineContainer.getChildren().size(); j++) {
             Circle space = (Circle) lineContainer.getChildren().get(j);
-            if (j < patternLine.getTiles().size()) {
-                Tile tile = patternLine.getTiles().get(j);
+            List<Tile> tiles = patternLine.getTiles();
+            if (j < tiles.size()) {
+                Tile tile = tiles.get(j);
                 space.setFill(Color.web(tile.getColor().getHexCode()));
             } else {
                 space.setFill(Color.web(CARD_BG));
@@ -555,23 +638,15 @@ public class ModernTwoPlayerGameController {
         VBox patternLinesContainer = findPatternLinesContainer(playerBoard);
         if (patternLinesContainer == null) return;
 
-        List<PatternLine> playerPatternLines = player.getPatternLines();
+        List<PatternLine> playerPatternLines = player.getPatternLines(); // Changed from PatternLines to PatternLine
 
         // Start from index 1 to skip the label
         for (int i = 1; i <= playerPatternLines.size(); i++) {
             HBox lineContainer = (HBox) patternLinesContainer.getChildren().get(i);
-            PatternLine patternLine = playerPatternLines.get(i - 1);
+            PatternLine patternLine = playerPatternLines.get(i - 1); // Changed from PatternLines
 
             // Update each space in the pattern line
-            for (int j = 0; j < lineContainer.getChildren().size(); j++) {
-                Circle space = (Circle) lineContainer.getChildren().get(j);
-                if (j < patternLine.getTiles().size()) {
-                    Tile tile = patternLine.getTiles().get(j);
-                    space.setFill(Color.web(tile.getColor().getHexCode()));
-                } else {
-                    space.setFill(Color.web(CARD_BG));
-                }
-            }
+            updatePatternLine(lineContainer, patternLine);
         }
     }
 
@@ -623,12 +698,12 @@ public class ModernTwoPlayerGameController {
         }
     }
 
-    private void updatePatternLine(HBox lineContainer, PatternLine patternLine) {
+    private void updatePatternLine(HBox lineContainer, PatternLine patternLine) { // Changed parameter type
+        List<Tile> tiles = patternLine.getTiles();
         for (int i = 0; i < lineContainer.getChildren().size(); i++) {
             Circle space = (Circle) lineContainer.getChildren().get(i);
-            if (i < patternLine.getTiles().size()) {
-                Tile tile = patternLine.getTiles().get(i);
-                space.setFill(Color.web(tile.getColor().getHexCode()));
+            if (i < tiles.size()) {
+                space.setFill(Color.web(tiles.get(i).getColor().getHexCode()));
             } else {
                 space.setFill(Color.web("#374151")); // Empty space color
             }
@@ -637,14 +712,14 @@ public class ModernTwoPlayerGameController {
 
     private void updateScores() {
         List<Player> players = gameModel.getPlayers();
-        updatePlayerScore(view.getPlayer1Board(), players.get(0).score);
-        updatePlayerScore(view.getPlayer2Board(), players.get(1).score);
+        updatePlayerScore(view.getPlayer1Board(), players.get(0));
+        updatePlayerScore(view.getPlayer2Board(), players.get(1));
     }
 
-    private void updatePlayerScore(VBox playerBoard, int score) {
+    private void updatePlayerScore(VBox playerBoard, Player player) { // Changed parameter
         HBox header = (HBox) playerBoard.getChildren().get(0);
         Label scoreLabel = (Label) header.getChildren().get(2);
-        scoreLabel.setText(String.valueOf(score));
+        scoreLabel.setText(String.valueOf(player.getScore())); // Use getter instead of direct field access
     }
 
     private void updateCurrentPlayer() {
@@ -791,7 +866,8 @@ public class ModernTwoPlayerGameController {
     }
 
     private boolean isRoundComplete() {
-        return gameModel.getFactories().stream().allMatch(List::isEmpty) &&
+        return gameModel.getFactories().stream()
+                .allMatch(factory -> factory.isEmpty()) &&
                 gameModel.getCenterPool().isEmpty();
     }
 

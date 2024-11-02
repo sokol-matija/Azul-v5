@@ -1,12 +1,13 @@
 package hr.algebra.azul.models;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-public class PatternLine {
-    public final int size;
-    public final List<Tile> tiles;
+public class PatternLine implements Serializable {
+    private final int size;
+    private final List<Tile> tiles;
 
     public PatternLine(int size) {
         this.size = size;
@@ -22,7 +23,7 @@ public class PatternLine {
     }
 
     public TileColor getColor() {
-        return isEmpty() ? null : tiles.get(0).getColor();  // Using the record's accessor
+        return isEmpty() ? null : tiles.get(0).getColor();
     }
 
     public boolean addTiles(List<Tile> newTiles) {
@@ -37,12 +38,15 @@ public class PatternLine {
         return false;
     }
 
-    // Make tiles accessible through a getter that returns an unmodifiable view
     public List<Tile> getTiles() {
         return Collections.unmodifiableList(tiles);
     }
 
-    public int getCurrentSize() {
-        return tiles.size();
+    public int getSize() {
+        return size;
+    }
+
+    public void clear() {
+        tiles.clear();
     }
 }

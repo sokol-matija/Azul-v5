@@ -1,65 +1,86 @@
 package hr.algebra.azul.models;
 
+import java.io.Serializable;
 import java.util.*;
-import java.util.stream.Collectors;
-import hr.algebra.azul.models.*;
 
-public class GameModel {
-    private static final int FACTORY_TILE_COUNT = 4;
+public class GameModel implements Serializable {
+    private static final long serialVersionUID = 1L;
     private static final int FACTORY_COUNT = 5;
-    private static final int PATTERN_LINE_COUNT = 5;
+    private static final int MIN_PLAYERS = 2;
+    private static final int MAX_PLAYERS = 4;
 
-    private final List<List<Tile>> factories;
+    // Game components
+    private final List<Factory> factories;
     private final List<Tile> centerPool;
     private final List<Player> players;
+    private final TileBag tileBag;
+    private final Stack<GameAction> actionHistory;
+
+    // Game state
     private Player currentPlayer;
     private boolean firstPlayerTokenTaken;
-    private final Stack<GameAction> actionHistory;
     private GameState gameState;
-    private TileBag tileBag = new TileBag();
+    private int currentRound;
+
+    public enum GameState {
+        SETUP,
+        FACTORY_SELECTION,
+        PATTERN_LINE_SELECTION,
+        WALL_TILING,
+        SCORING,
+        GAME_END
+    }
 
     public GameModel(int numberOfPlayers) {
-        if (numberOfPlayers < 2 || numberOfPlayers > 4) {
-            throw new IllegalArgumentException("Player count must be between 2 and 4");
-        }
+        validatePlayerCount(numberOfPlayers);
 
-        this.factories = new ArrayList<>();
-        for (int i = 0; i < FACTORY_COUNT; i++) {
-            factories.add(new ArrayList<>());
-        }
-
+        // Initialize game components
+        this.factories = initializeFactories();
         this.centerPool = new ArrayList<>();
-        this.players = new ArrayList<>();
-        for (int i = 0; i < numberOfPlayers; i++) {
-            players.add(new Player("Player " + (i + 1)));
-        }
+        this.players = createPlayers(numberOfPlayers);
+        this.tileBag = new TileBag();
+        this.actionHistory = new Stack<>();
 
+        // Set initial state
         this.currentPlayer = players.get(0);
         this.firstPlayerTokenTaken = false;
-        this.actionHistory = new Stack<>();
         this.gameState = GameState.SETUP;
+        this.currentRound = 1;
 
         initializeGame();
     }
 
-    public void moveTilesToCenter(List<Tile> tiles) {
-        centerPool.addAll(tiles);
+    private void validatePlayerCount(int numberOfPlayers) {
+        if (numberOfPlayers < MIN_PLAYERS || numberOfPlayers > MAX_PLAYERS) {
+            throw new IllegalArgumentException(
+                    "Player count must be between " + MIN_PLAYERS + " and " + MAX_PLAYERS);
+        }
     }
-    public enum GameState {
-        SETUP, FACTORY_SELECTION, PATTERN_LINE_SELECTION, WALL_TILING, SCORING, GAME_END
+
+    private List<Factory> initializeFactories() {
+        List<Factory> factoryList = new ArrayList<>();
+        for (int i = 0; i < FACTORY_COUNT; i++) {
+            factoryList.add(new Factory(i));
+        }
+        return factoryList;
+    }
+
+    private List<Player> createPlayers(int numberOfPlayers) {
+        List<Player> playerList = new ArrayList<>();
+        for (int i = 0; i < numberOfPlayers; i++) {
+            playerList.add(new Player("Player " + (i + 1)));
+        }
+        return playerList;
     }
 
     public void initializeGame() {
-        for (List<Tile> factory : factories) {
-            factory.clear(); // Clear any existing tiles
-            // Always add exactly 4 tiles to each factory
-            for (int i = 0; i < FACTORY_TILE_COUNT; i++) {
-                if (tileBag.hasNext()) {
-                    factory.add(tileBag.draw());
-                }
-            }
+        // Fill factories
+        for (Factory factory : factories) {
+            factory.clear();
+            factory.fillFromBag(tileBag);
         }
 
+        // Reset center pool
         centerPool.clear();
         centerPool.add(new Tile(null)); // First player token
 
@@ -67,16 +88,29 @@ public class GameModel {
     }
 
     public boolean selectTilesFromFactory(int factoryIndex, TileColor color, int patternLineIndex) {
+        if (!isValidSelection(factoryIndex, color, patternLineIndex)) {
+            return false;
+        }
+
+        Factory factory = factories.get(factoryIndex);
+        List<Tile> selectedTiles = factory.selectTilesByColor(color);
+        List<Tile> remainingTiles = factory.removeRemainingTiles();
+
+        // Move remaining tiles to center
+        centerPool.addAll(remainingTiles);
+
+        // Record action for undo
+        recordAction(factoryIndex, color, patternLineIndex, selectedTiles, remainingTiles);
+
+        return placeTiles(selectedTiles, patternLineIndex);
+    }
+
+    private boolean isValidSelection(int factoryIndex, TileColor color, int patternLineIndex) {
         if (gameState != GameState.FACTORY_SELECTION) {
             return false;
         }
 
-        List<Tile> selectedFactory = factories.get(factoryIndex);
-        List<Tile> selectedTiles = selectedFactory.stream()
-                .filter(tile -> tile.getColor() == color)
-                .collect(Collectors.toList());
-
-        if (selectedTiles.isEmpty()) {
+        if (factoryIndex < 0 || factoryIndex >= factories.size()) {
             return false;
         }
 
@@ -84,26 +118,66 @@ public class GameModel {
             return false;
         }
 
-        // Move non-selected tiles to center
-        List<Tile> nonSelectedTiles = selectedFactory.stream()
-                .filter(tile -> tile.getColor() != color)
-                .collect(Collectors.toList());
-        centerPool.addAll(nonSelectedTiles);
+        return true;
+    }
 
-        // Record action for undo
+    private void recordAction(int factoryIndex, TileColor color, int patternLineIndex,
+                              List<Tile> selectedTiles, List<Tile> remainingTiles) {
         actionHistory.push(new GameAction(
                 GameAction.ActionType.FACTORY_SELECTION,
                 Map.of(
                         "factoryIndex", factoryIndex,
                         "color", color,
-                        "patternLineIndex", patternLineIndex
+                        "patternLineIndex", patternLineIndex,
+                        "selectedTiles", new ArrayList<>(selectedTiles),
+                        "remainingTiles", new ArrayList<>(remainingTiles)
                 )
         ));
+    }
 
-        // Clear the factory
-        selectedFactory.clear();
+    public boolean selectTilesFromCenter(TileColor color, int patternLineIndex) {
+        if (!isValidCenterSelection(color, patternLineIndex)) {
+            return false;
+        }
+
+        List<Tile> selectedTiles = collectTilesFromCenter(color);
+        handleFirstPlayerToken();
 
         return placeTiles(selectedTiles, patternLineIndex);
+    }
+
+    private boolean isValidCenterSelection(TileColor color, int patternLineIndex) {
+        return gameState == GameState.FACTORY_SELECTION &&
+                !centerPool.isEmpty() &&
+                currentPlayer.canPlaceTiles(color, patternLineIndex);
+    }
+
+    private List<Tile> collectTilesFromCenter(TileColor color) {
+        List<Tile> selectedTiles = new ArrayList<>();
+        Iterator<Tile> iterator = centerPool.iterator();
+
+        while (iterator.hasNext()) {
+            Tile tile = iterator.next();
+            if (tile.getColor() == color) {
+                selectedTiles.add(tile);
+                iterator.remove();
+            }
+        }
+
+        return selectedTiles;
+    }
+
+    private void handleFirstPlayerToken() {
+        if (!firstPlayerTokenTaken) {
+            for (Tile tile : centerPool) {
+                if (tile.getColor() == null) {
+                    firstPlayerTokenTaken = true;
+                    centerPool.remove(tile);
+                    currentPlayer.getFloorLine().addTile(tile);
+                    break;
+                }
+            }
+        }
     }
 
     private boolean placeTiles(List<Tile> tiles, int patternLineIndex) {
@@ -111,130 +185,125 @@ public class GameModel {
             return false;
         }
 
-        PatternLine targetLine = currentPlayer.patternLines.get(patternLineIndex);
-        List<Tile> overflow = new ArrayList<>();
+        PatternLine targetLine = currentPlayer.getPatternLines().get(patternLineIndex);
+        List<Tile> overflow = calculateOverflow(tiles, targetLine);
 
-        // Try to place tiles in pattern line
-        if (!targetLine.addTiles(tiles)) {
-            // If placement fails, all tiles go to floor line
-            overflow.addAll(tiles);
-        } else {
-            // Calculate overflow
-            int availableSpace = targetLine.size - targetLine.tiles.size();
-            if (tiles.size() > availableSpace) {
-                overflow.addAll(tiles.subList(availableSpace, tiles.size()));
-            }
-        }
-
-        // Add overflow to floor line
         if (!overflow.isEmpty()) {
-            currentPlayer.floorLine.addTiles(overflow);
+            currentPlayer.getFloorLine().addTiles(overflow);
         }
 
         return true;
     }
 
-    public void endTurn() {
-        // Check if round is complete
-        boolean roundComplete = factories.stream().allMatch(List::isEmpty) && centerPool.isEmpty();
+    private List<Tile> calculateOverflow(List<Tile> tiles, PatternLine targetLine) {
+        List<Tile> overflow = new ArrayList<>();
 
-        if (roundComplete) {
+        if (!targetLine.addTiles(tiles)) {
+            overflow.addAll(tiles);
+        } else {
+            int availableSpace = targetLine.getSize() - targetLine.getTiles().size();
+            if (tiles.size() > availableSpace) {
+                overflow.addAll(tiles.subList(availableSpace, tiles.size()));
+            }
+        }
+
+        return overflow;
+    }
+
+
+    public void endTurn() {
+        if (isRoundComplete()) {
             handleRoundEnd();
         } else {
-            // Switch to next player
-            int currentIndex = players.indexOf(currentPlayer);
-            currentPlayer = players.get((currentIndex + 1) % players.size());
+            moveToNextPlayer();
         }
+    }
+
+    private boolean isRoundComplete() {
+        return factories.stream().allMatch(Factory::isEmpty) && centerPool.isEmpty();
+    }
+
+    private void moveToNextPlayer() {
+        int currentIndex = players.indexOf(currentPlayer);
+        currentPlayer = players.get((currentIndex + 1) % players.size());
     }
 
     private void handleRoundEnd() {
-        // Wall tiling phase
-        for (Player player : players) {
-            for (int i = 0; i < PATTERN_LINE_COUNT; i++) {
-                PatternLine line = player.patternLines.get(i);
-                if (line.isFull()) {
-                    TileColor color = line.getColor();
-                    player.score += player.wall.addTile(i, color);
-                }
-            }
+        processWallTiling();
 
-            // Apply floor line penalties
-            player.score += player.floorLine.calculatePenalty();
-            player.floorLine.clear();
-        }
-
-        // Check for game end
-        boolean gameComplete = checkGameEnd();
-        if (gameComplete) {
-            calculateFinalScores();
-            gameState = GameState.GAME_END;
+        if (isGameComplete()) {
+            finishGame();
         } else {
-            // Prepare next round
-            initializeGame();
+            startNewRound();
         }
     }
 
-    private boolean checkGameEnd() {
-        // Game ends if any player has completed a horizontal line
-        return players.stream().anyMatch(player -> {
-            for (int row = 0; row < 5; row++) {
-                boolean rowComplete = true;
-                for (int col = 0; col < 5; col++) {
-                    if (!player.wall.tiles[row][col]) {
-                        rowComplete = false;
-                        break;
-                    }
+    private void processWallTiling() {
+        for (Player player : players) {
+            // Process pattern lines
+            List<PatternLine> patterns = player.getPatternLines();
+            for (PatternLine line : patterns) {
+                if (line.isFull()) {
+                    processCompletedLine(player, line);
                 }
-                if (rowComplete) return true;
             }
-            return false;
-        });
+
+            // Apply floor penalties
+            applyFloorPenalties(player);
+        }
+    }
+
+    public void addTilesToCenter(List<Tile> tiles) {
+        centerPool.addAll(tiles);
+    }
+
+    private void processCompletedLine(Player player, PatternLine line) {
+        TileColor color = line.getColor();
+        int lineIndex = player.getPatternLines().indexOf(line);
+        int points = player.getWall().addTile(lineIndex, color);
+        player.addScore(points);
+        line.clear();
+    }
+
+    private void applyFloorPenalties(Player player) {
+        int penalty = ScoringSystem.calculateFloorLinePenalty(player.getFloorLine());
+        player.addScore(penalty);
+        player.getFloorLine().clear();
+    }
+
+    private boolean isGameComplete() {
+        return hasCompletedRow() || currentRound >= 5;
+    }
+
+    private boolean hasCompletedRow() {
+        return players.stream().anyMatch(Player::hasCompletedRow);
+    }
+
+    private void finishGame() {
+        calculateFinalScores();
+        gameState = GameState.GAME_END;
     }
 
     private void calculateFinalScores() {
         for (Player player : players) {
-            // Bonus for completed horizontal lines (2 points per line)
-            for (int row = 0; row < 5; row++) {
-                boolean rowComplete = true;
-                for (int col = 0; col < 5; col++) {
-                    if (!player.wall.tiles[row][col]) {
-                        rowComplete = false;
-                        break;
-                    }
-                }
-                if (rowComplete) player.score += 2;
-            }
-
-            // Bonus for completed vertical lines (7 points per line)
-            for (int col = 0; col < 5; col++) {
-                boolean colComplete = true;
-                for (int row = 0; row < 5; row++) {
-                    if (!player.wall.tiles[row][col]) {
-                        colComplete = false;
-                        break;
-                    }
-                }
-                if (colComplete) player.score += 7;
-            }
-
-            // Bonus for completed colors (10 points per color)
-            for (TileColor color : TileColor.values()) {
-                boolean colorComplete = true;
-                for (int row = 0; row < 5; row++) {
-                    for (int col = 0; col < 5; col++) {
-                        if (player.wall.wallPattern[row][col] == color && !player.wall.tiles[row][col]) {
-                            colorComplete = false;
-                            break;
-                        }
-                    }
-                }
-                if (colorComplete) player.score += 10;
-            }
+            int bonus = ScoringSystem.calculateEndGameBonus(player);
+            player.addScore(bonus);
         }
     }
 
-    // Getters for game state
-    public List<List<Tile>> getFactories() {
+    private void startNewRound() {
+        currentRound++;
+        resetRoundState();
+        initializeGame();
+    }
+
+    private void resetRoundState() {
+        firstPlayerTokenTaken = false;
+        gameState = GameState.FACTORY_SELECTION;
+    }
+
+    // Getters
+    public List<Factory> getFactories() {
         return Collections.unmodifiableList(factories);
     }
 
@@ -242,15 +311,23 @@ public class GameModel {
         return Collections.unmodifiableList(centerPool);
     }
 
+    public List<Player> getPlayers() {
+        return Collections.unmodifiableList(players);
+    }
+
     public Player getCurrentPlayer() {
         return currentPlayer;
     }
 
-    public GameModel.GameState getGameState() {
+    public GameState getGameState() {
         return gameState;
     }
 
-    public List<Player> getPlayers() {
-        return Collections.unmodifiableList(players);
+    public int getCurrentRound() {
+        return currentRound;
+    }
+
+    public boolean isFirstPlayerTokenTaken() {
+        return firstPlayerTokenTaken;
     }
 }

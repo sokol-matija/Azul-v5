@@ -1,10 +1,12 @@
 package hr.algebra.azul.models;
 
+import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
-public class Player {
-    private static final int PATTERN_LINE_COUNT = 5; // Added constant
+public class Player implements Serializable {
+    private static final int PATTERN_LINE_COUNT = 5;
 
     public final String name;
     public int score;
@@ -16,11 +18,16 @@ public class Player {
         this.name = name;
         this.score = 0;
         this.wall = new Wall();
-        this.patternLines = new ArrayList<>();
-        for (int i = 0; i < PATTERN_LINE_COUNT; i++) {
-            patternLines.add(new PatternLine(i + 1)); // Creates pattern lines of sizes 1 through 5
-        }
+        this.patternLines = initializePatternLines();
         this.floorLine = new FloorLine();
+    }
+
+    private List<PatternLine> initializePatternLines() {
+        List<PatternLine> lines = new ArrayList<>();
+        for (int i = 0; i < PATTERN_LINE_COUNT; i++) {
+            lines.add(new PatternLine(i + 1)); // Creates pattern lines of sizes 1 through 5
+        }
+        return lines;
     }
 
     public boolean canPlaceTiles(TileColor color, int patternLineIndex) {
@@ -29,6 +36,7 @@ public class Player {
         }
 
         PatternLine patternLine = patternLines.get(patternLineIndex);
+
         // Check if pattern line already has different color
         if (!patternLine.isEmpty() && patternLine.getColor() != color) {
             return false;
@@ -38,31 +46,11 @@ public class Player {
         return !wall.hasColor(patternLineIndex, color);
     }
 
-    // Getters
-    public String getName() { return name; }
-    public int getScore() { return score; }
-    public Wall getWall() { return wall; }
-    public List<PatternLine> getPatternLines() { return new ArrayList<>(patternLines); }
-    public FloorLine getFloorLine() { return floorLine; }
-    public static int getPatternLineCount() { return PATTERN_LINE_COUNT; }
-
-    // Setter for score
-    public void setScore(int score) { this.score = score; }
-
-    // Additional helper methods
-    public boolean isPatternLineFull(int index) {
-        if (index < 0 || index >= PATTERN_LINE_COUNT) {
-            return false;
-        }
-        return patternLines.get(index).isFull();
-    }
-
     public boolean hasCompletedRow() {
-        boolean[][] tiles = wall.getTiles();
-        for (int row = 0; row < PATTERN_LINE_COUNT; row++) {
+        for (int row = 0; row < Wall.WALL_SIZE; row++) {
             boolean rowComplete = true;
-            for (int col = 0; col < PATTERN_LINE_COUNT; col++) {
-                if (!tiles[row][col]) {
+            for (int col = 0; col < Wall.WALL_SIZE; col++) {
+                if (!wall.isTilePlaced(row, col)) {
                     rowComplete = false;
                     break;
                 }
@@ -72,20 +60,65 @@ public class Player {
         return false;
     }
 
+    // Getters
+    public String getName() {
+        return name;
+    }
+
+    public int getScore() {
+        return score;
+    }
+
+    public Wall getWall() {
+        return wall;
+    }
+
+    public List<PatternLine> getPatternLines() {
+        return Collections.unmodifiableList(patternLines);
+    }
+
+    public PatternLine getPatternLine(int index) {
+        if (index >= 0 && index < patternLines.size()) {
+            return patternLines.get(index);
+        }
+        throw new IndexOutOfBoundsException("Invalid pattern line index: " + index);
+    }
+
+    public FloorLine getFloorLine() {
+        return floorLine;
+    }
+
+    // Score management
+    public void addScore(int points) {
+        this.score += points;
+    }
+
+    public void setScore(int score) {
+        this.score = score;
+    }
+
+    // Pattern line management
     public void clearPatternLine(int index) {
         if (index >= 0 && index < PATTERN_LINE_COUNT) {
-            patternLines.set(index, new PatternLine(index + 1));
+            patternLines.get(index).clear();
         }
+    }
+
+    public boolean isPatternLineFull(int index) {
+        if (index < 0 || index >= PATTERN_LINE_COUNT) {
+            return false;
+        }
+        return patternLines.get(index).isFull();
     }
 
     public int calculateFinalScore() {
         int finalScore = score;
 
         // Bonus for completed rows (2 points each)
-        for (int row = 0; row < PATTERN_LINE_COUNT; row++) {
+        for (int row = 0; row < Wall.WALL_SIZE; row++) {
             boolean rowComplete = true;
-            for (int col = 0; col < PATTERN_LINE_COUNT; col++) {
-                if (!wall.getTiles()[row][col]) {
+            for (int col = 0; col < Wall.WALL_SIZE; col++) {
+                if (!wall.isTilePlaced(row, col)) {
                     rowComplete = false;
                     break;
                 }
@@ -94,10 +127,10 @@ public class Player {
         }
 
         // Bonus for completed columns (7 points each)
-        for (int col = 0; col < PATTERN_LINE_COUNT; col++) {
+        for (int col = 0; col < Wall.WALL_SIZE; col++) {
             boolean colComplete = true;
-            for (int row = 0; row < PATTERN_LINE_COUNT; row++) {
-                if (!wall.getTiles()[row][col]) {
+            for (int row = 0; row < Wall.WALL_SIZE; row++) {
+                if (!wall.isTilePlaced(row, col)) {
                     colComplete = false;
                     break;
                 }
@@ -110,8 +143,8 @@ public class Player {
             boolean colorComplete = true;
             boolean[][] tiles = wall.getTiles();
             TileColor[][] pattern = wall.getWallPattern();
-            for (int row = 0; row < PATTERN_LINE_COUNT; row++) {
-                for (int col = 0; col < PATTERN_LINE_COUNT; col++) {
+            for (int row = 0; row < Wall.WALL_SIZE; row++) {
+                for (int col = 0; col < Wall.WALL_SIZE; col++) {
                     if (pattern[row][col] == color && !tiles[row][col]) {
                         colorComplete = false;
                         break;
