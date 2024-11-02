@@ -1,5 +1,7 @@
 package hr.algebra.azul.controllers;
 
+import hr.algebra.azul.helper.GameUIConstants;
+import hr.algebra.azul.helper.PatternLineInteractionHandler;
 import hr.algebra.azul.helper.TileAnimationManager;
 import hr.algebra.azul.models.*;
 import hr.algebra.azul.view.ModernTwoPlayerGameView;
@@ -7,6 +9,7 @@ import javafx.animation.*;
 import javafx.application.Platform;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleIntegerProperty;
+import javafx.collections.ListChangeListener;
 import javafx.geometry.Bounds;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -25,9 +28,11 @@ import javafx.util.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 public class ModernTwoPlayerGameController {
+    private PatternLineInteractionHandler patternLineInteractionHandler;
     private final ModernTwoPlayerGameView view;
     private final GameModel gameModel;
     private final Stage primaryStage;
@@ -53,7 +58,8 @@ public class ModernTwoPlayerGameController {
     public ModernTwoPlayerGameController(ModernTwoPlayerGameView view, Stage primaryStage) {
         this.view = view;
         this.primaryStage = primaryStage;
-        this.gameModel = new GameModel(2); // Initialize 2-player game
+        this.gameModel = new GameModel(2);
+        this.patternLineInteractionHandler = new PatternLineInteractionHandler(view, gameModel);// Initialize 2-player game
         initializeController();
         updateEntireView();
     }
@@ -62,6 +68,7 @@ public class ModernTwoPlayerGameController {
         setupButtonHandlers();
         setupFactoryClickHandlers();
         setupPatternLineHandlers();
+        setupCenterPoolClickHandlers();
         initializeTimer();
 
         view.getStage().setOnCloseRequest(e -> {
@@ -87,7 +94,7 @@ public class ModernTwoPlayerGameController {
 
     private void setupPlayerPatternLines(VBox playerBoard) {
         // Find the VBox containing pattern lines - it's after the header and hand
-        VBox patternLinesContainer = findPatternLinesContainer(playerBoard);
+        VBox patternLinesContainer = patternLineInteractionHandler.findPatternLinesContainer(playerBoard);
         if (patternLinesContainer != null) {
             // Skip the label and get the pattern lines container
             for (int i = 1; i < patternLinesContainer.getChildren().size(); i++) {
@@ -100,20 +107,7 @@ public class ModernTwoPlayerGameController {
         }
     }
 
-    private VBox findPatternLinesContainer(VBox playerBoard) {
-        for (Node node : playerBoard.getChildren()) {
-            if (node instanceof VBox container) {
-                // Look for the VBox that contains the "Pattern Lines" label
-                boolean isPatternLinesContainer = container.getChildren().stream()
-                        .anyMatch(child -> child instanceof Label &&
-                                ((Label) child).getText().equals("Pattern Lines"));
-                if (isPatternLinesContainer) {
-                    return container;
-                }
-            }
-        }
-        return null;
-    }
+
 
     private void handleFactoryClick(Circle clickedTile, VBox factory, int factoryIndex) {
         if (isGamePaused) return;
@@ -142,6 +136,9 @@ public class ModernTwoPlayerGameController {
                     gameModel.addTilesToCenter(remainingTiles);
                     updateFactoryDisplay(factory);
                     updateCenterPool();
+
+                    // Set up pattern line interactions after updating hand
+                    patternLineInteractionHandler.setupPatternLineInteractions();
                 }
         );
     }
@@ -159,6 +156,227 @@ public class ModernTwoPlayerGameController {
                 }
             }
         }
+    }
+
+    private void setupCenterPoolClickHandlers() {
+        VBox centerPool = view.getCenterPool();
+        FlowPane tilesContainer = (FlowPane) centerPool.getChildren().get(1); // Get the tiles container
+
+        tilesContainer.getChildren().addListener((ListChangeListener<Node>) change -> {
+            while (change.next()) {
+                if (change.wasAdded()) {
+                    for (Node node : change.getAddedSubList()) {
+                        if (node instanceof Circle tile) {
+                            setupCenterTileInteraction(tile, centerPool);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    private void setupCenterTileInteraction(Circle tile, VBox centerPool) {
+        // Skip if it's the first player token
+        if (tile.getFill() == null) return;
+
+        // Add hover effects
+        setupTileHoverEffectsForCenter(tile, (Color) tile.getFill(), centerPool);
+
+        // Add click handler
+        tile.setOnMouseClicked(e -> handleCenterTileClick(tile, centerPool));
+    }
+
+    private void setupTileHoverEffectsForCenter(Circle tileCircle, Color tileColor, VBox centerPool) {
+        // Create glow effect
+        DropShadow glow = new DropShadow();
+        glow.setColor(tileColor);
+        glow.setRadius(10);
+        glow.setSpread(0.3);
+
+        tileCircle.setOnMouseEntered(e -> {
+            // Highlight the center pool
+            centerPool.setStyle(String.format("""
+            -fx-background-color: %s;
+            -fx-background-radius: 10;
+            -fx-border-color: #60A5FA;
+            -fx-border-width: 2;
+            -fx-border-radius: 10;
+            """, CARD_BG));
+
+            // Highlight all tiles of the same color
+            FlowPane tilesContainer = (FlowPane) centerPool.getChildren().get(1);
+            for (Node node : tilesContainer.getChildren()) {
+                if (node instanceof Circle circle && circle.getFill().equals(tileColor)) {
+                    // Scale up effect
+                    ScaleTransition scale = new ScaleTransition(Duration.millis(100), circle);
+                    scale.setToX(1.1);
+                    scale.setToY(1.1);
+                    scale.play();
+
+                    // Add glow effect
+                    circle.setEffect(glow);
+
+                    // Add highlight stroke
+                    circle.setStroke(Color.web("#60A5FA"));
+                    circle.setStrokeWidth(2);
+                }
+            }
+        });
+
+        tileCircle.setOnMouseExited(e -> {
+            // Reset center pool style
+            centerPool.setStyle(String.format("""
+            -fx-background-color: %s;
+            -fx-background-radius: 10;
+            """, CARD_BG));
+
+            // Reset all tiles
+            FlowPane tilesContainer = (FlowPane) centerPool.getChildren().get(1);
+            for (Node node : tilesContainer.getChildren()) {
+                if (node instanceof Circle circle && circle.getFill().equals(tileColor)) {
+                    // Scale down effect
+                    ScaleTransition scale = new ScaleTransition(Duration.millis(100), circle);
+                    scale.setToX(1.0);
+                    scale.setToY(1.0);
+                    scale.play();
+
+                    // Reset effect
+                    circle.setEffect(new InnerShadow(5, Color.web("#000000", 0.2)));
+
+                    // Reset stroke
+                    circle.setStroke(Color.web("#4B5563"));
+                    circle.setStrokeWidth(1);
+                }
+            }
+        });
+    }
+
+    private void handleCenterTileClick(Circle clickedTile, VBox centerPool) {
+        if (isGamePaused || getCurrentPlayerHand().getChildren().size() > 0) return;
+
+        // Get the color of the clicked tile
+        Color tileColor = (Color) clickedTile.getFill();
+        TileColor selectedColor = getTileColorFromFill(tileColor);
+
+        // Get all tiles of the same color from center
+        List<Tile> selectedTiles = collectTilesFromCenter(selectedColor);
+
+        // Handle first player token if present
+        boolean hasFirstPlayerToken = handleFirstPlayerToken();
+
+        // Get the current player's hand
+        HBox playerHand = getCurrentPlayerHand();
+
+        // Start animation
+        animateSelectionFromCenter(centerPool, selectedTiles, playerHand, hasFirstPlayerToken);
+    }
+
+    private List<Tile> collectTilesFromCenter(TileColor color) {
+        List<Tile> selectedTiles = new ArrayList<>();
+        List<Circle> tilesToRemove = new ArrayList<>();
+
+        FlowPane tilesContainer = (FlowPane) view.getCenterPool().getChildren().get(1);
+
+        tilesContainer.getChildren().forEach(node -> {
+            if (node instanceof Circle tile) {
+                Color tileColor = (Color) tile.getFill();
+                if (getTileColorFromFill(tileColor) == color) {
+                    selectedTiles.add(new Tile(color));
+                    tilesToRemove.add(tile);
+                }
+            }
+        });
+
+        // Remove selected tiles from view
+        tilesContainer.getChildren().removeAll(tilesToRemove);
+
+        return selectedTiles;
+    }
+
+    private boolean handleFirstPlayerToken() {
+        FlowPane tilesContainer = (FlowPane) view.getCenterPool().getChildren().get(1);
+        AtomicBoolean tokenFound = new AtomicBoolean(false);
+
+        tilesContainer.getChildren().removeIf(node -> {
+            if (node instanceof Circle tile && tile.getFill() == null) {
+                // This is the first player token
+                tokenFound.set(true);
+                // Add token to current player's floor line
+                gameModel.getCurrentPlayer().getFloorLine().addTile(new Tile(null));
+                return true;
+            }
+            return false;
+        });
+
+        return tokenFound.get();
+    }
+
+    private void animateSelectionFromCenter(VBox centerPool, List<Tile> selectedTiles,
+                                            HBox playerHand, boolean hasFirstPlayerToken) {
+        // Create visual representations of selected tiles
+        List<Circle> tileCircles = createTileCircles(selectedTiles);
+
+        // Get initial and target positions for animation
+        Bounds centerBounds = centerPool.localToScene(centerPool.getBoundsInLocal());
+        Bounds handBounds = playerHand.localToScene(playerHand.getBoundsInLocal());
+
+        // Create animation
+        ParallelTransition animation = new ParallelTransition();
+
+        // Add path transitions for each tile
+        for (Circle tileCircle : tileCircles) {
+            PathTransition path = createPathTransition(
+                    centerBounds.getCenterX(), centerBounds.getCenterY(),
+                    handBounds.getCenterX(), handBounds.getCenterY(),
+                    tileCircle,
+                    Duration.millis(500)
+            );
+            animation.getChildren().add(path);
+        }
+
+        // After animation completes
+        animation.setOnFinished(e -> {
+            // Update player's hand
+            updatePlayerHand(selectedTiles);
+
+            // Update game state
+            if (hasFirstPlayerToken) {
+                gameModel.getCurrentPlayer().getFloorLine().addTile(new Tile(null));
+            }
+
+            // Set up pattern line interactions
+            patternLineInteractionHandler.setupPatternLineInteractions();
+
+            // Check if center and factories are empty to end round
+            if (isCenterEmpty() && areFactoriesEmpty()) {
+                handleRoundEnd();
+            }
+        });
+
+        animation.play();
+    }
+
+    private PathTransition createPathTransition(double startX, double startY,
+                                                double endX, double endY,
+                                                Node node, Duration duration) {
+        Path path = new Path();
+        path.getElements().addAll(
+                new MoveTo(startX, startY),
+                new LineTo(endX, endY)
+        );
+
+        PathTransition transition = new PathTransition(duration, path, node);
+        transition.setInterpolator(Interpolator.EASE_OUT);
+        return transition;
+    }
+
+    private boolean isCenterEmpty() {
+        FlowPane tilesContainer = (FlowPane) view.getCenterPool().getChildren().get(1);
+        return tilesContainer.getChildren().isEmpty();
+    }
+
+    private boolean areFactoriesEmpty() {
+        return gameModel.getFactories().stream().allMatch(Factory::isEmpty);
     }
 
     private void animateSelectionAndMove(VBox factoryNode, List<Tile> selectedTiles, List<Tile> remainingTiles) {
@@ -209,10 +427,9 @@ public class ModernTwoPlayerGameController {
 
     private List<Circle> createTileCircles(List<Tile> tiles) {
         return tiles.stream().map(tile -> {
-            Circle circle = new Circle(15);
+            Circle circle = GameUIConstants.createBaseCircle();
             circle.setFill(Color.web(tile.getColor().getHexCode()));
-            circle.setStroke(Color.web("#4B5563"));
-            circle.setStrokeWidth(1);
+            circle.setEffect(GameUIConstants.createTileShadow());
             return circle;
         }).collect(Collectors.toList());
     }
@@ -257,6 +474,7 @@ public class ModernTwoPlayerGameController {
             tileCircle.setStrokeWidth(1);
             hand.getChildren().add(tileCircle);
         }
+        patternLineInteractionHandler.setupPatternLineInteractions();
     }
 
     private void clearPlayerHand() {
@@ -371,7 +589,7 @@ public class ModernTwoPlayerGameController {
                 ? view.getPlayer1Board()
                 : view.getPlayer2Board();
 
-        VBox patternLinesContainer = findPatternLinesContainer(playerBoard);
+        VBox patternLinesContainer = patternLineInteractionHandler.findPatternLinesContainer(playerBoard);
         if (patternLinesContainer == null) return;
 
         HBox targetLine = (HBox) patternLinesContainer.getChildren().get(lineIndex + 1);
@@ -599,7 +817,7 @@ public class ModernTwoPlayerGameController {
     }
 
     private void updateSinglePlayerPatternLines(VBox playerBoard, Player player) {
-        VBox patternLinesContainer = findPatternLinesContainer(playerBoard);
+        VBox patternLinesContainer = patternLineInteractionHandler.findPatternLinesContainer(playerBoard);
         if (patternLinesContainer == null) return;
 
         List<PatternLine> playerPatternLines = player.getPatternLines();
@@ -632,10 +850,8 @@ public class ModernTwoPlayerGameController {
         });
     }
 
-
-
     private void updatePlayerPatternLines(VBox playerBoard, Player player) {
-        VBox patternLinesContainer = findPatternLinesContainer(playerBoard);
+        VBox patternLinesContainer = patternLineInteractionHandler.findPatternLinesContainer(playerBoard);
         if (patternLinesContainer == null) return;
 
         List<PatternLine> playerPatternLines = player.getPatternLines(); // Changed from PatternLines to PatternLine

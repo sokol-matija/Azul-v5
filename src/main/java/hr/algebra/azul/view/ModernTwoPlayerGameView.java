@@ -8,6 +8,7 @@ import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.effect.DropShadow;
@@ -18,6 +19,9 @@ import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.stage.Stage;
 import javafx.util.Duration;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class ModernTwoPlayerGameView {
     private Stage stage;
@@ -380,18 +384,43 @@ public class ModernTwoPlayerGameView {
     }
 
     private VBox createPatternLines() {
-        VBox patternLines = new VBox(2);
-        patternLines.setAlignment(Pos.CENTER_LEFT);
-        for (int i = 0; i < 5; i++) {
-            HBox row = new HBox(5);
-            for (int j = 0; j <= i; j++) {
-                Circle circle = createTileSpace();
-                row.getChildren().add(circle);
+        VBox patternLinesSection = new VBox(8);
+        patternLinesSection.setPadding(new Insets(10));
+
+        // Pattern Lines label
+        Label titleLabel = new Label("Pattern Lines");
+        titleLabel.setStyle("-fx-text-fill: #9CA3AF; -fx-font-size: 14px;");
+        patternLinesSection.getChildren().add(titleLabel);
+
+        // Create pattern lines (bottom to top)
+        for (int row = 0; row < 5; row++) {
+            HBox patternLine = new HBox(5); // 5 pixels spacing between circles
+            patternLine.setPadding(new Insets(2));
+
+            // For each row, create the correct number of spaces (5,4,3,2,1)
+            int numSpaces = 5 - row;  // Start with 5 and decrease
+
+            for (int i = 0; i < numSpaces; i++) {
+                Circle tileSpace = createTileSpace();
+                patternLine.getChildren().add(tileSpace);
             }
-            patternLines.getChildren().add(row);
+
+            patternLinesSection.getChildren().add(patternLine);
         }
-        return patternLines;
+
+        // Reverse the order of the pattern lines (excluding the label)
+        List<Node> lines = new ArrayList<>(patternLinesSection.getChildren());
+        patternLinesSection.getChildren().clear();
+        patternLinesSection.getChildren().add(lines.get(0)); // Add label back first
+
+        // Add the lines in reverse order
+        for (int i = lines.size() - 1; i > 0; i--) {
+            patternLinesSection.getChildren().add(lines.get(i));
+        }
+
+        return patternLinesSection;
     }
+
 
     private void createWallGrid(GridPane wall) {
         Wall wallModel = new Wall();
@@ -586,14 +615,15 @@ public class ModernTwoPlayerGameView {
         return factory;
     }
 
+    // In ModernTwoPlayerGameView.java
     private VBox createCenterPool() {
         VBox pool = new VBox(10);
         pool.setAlignment(Pos.CENTER);
         pool.setPadding(new Insets(20));
         pool.setStyle(String.format("""
-            -fx-background-color: %s;
-            -fx-background-radius: 10;
-            """,CARD_BG));
+        -fx-background-color: %s;
+        -fx-background-radius: 10;
+        """, CARD_BG));
 
         Label centerLabel = new Label("Center");
         centerLabel.setStyle("-fx-text-fill: #9CA3AF; -fx-font-size: 14px;");
