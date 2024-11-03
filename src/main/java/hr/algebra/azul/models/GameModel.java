@@ -2,6 +2,7 @@ package hr.algebra.azul.models;
 
 import java.io.Serializable;
 import java.util.*;
+import java.util.stream.IntStream;
 
 public class GameModel implements Serializable {
     private static final long serialVersionUID = 1L;
@@ -21,6 +22,11 @@ public class GameModel implements Serializable {
     private boolean firstPlayerTokenTaken;
     private GameState gameState;
     private int currentRound;
+    private boolean isProcessingRound;
+
+    public void addTilesToCenter(List<Tile> tiles) {
+        centerPool.addAll(tiles);
+    }
 
     public enum GameState {
         SETUP,
@@ -33,20 +39,16 @@ public class GameModel implements Serializable {
 
     public GameModel(int numberOfPlayers) {
         validatePlayerCount(numberOfPlayers);
-
-        // Initialize game components
         this.factories = initializeFactories();
         this.centerPool = new ArrayList<>();
         this.players = createPlayers(numberOfPlayers);
         this.tileBag = new TileBag();
         this.actionHistory = new Stack<>();
-
-        // Set initial state
         this.currentPlayer = players.get(0);
         this.firstPlayerTokenTaken = false;
         this.gameState = GameState.SETUP;
         this.currentRound = 1;
-
+        this.isProcessingRound = false;
         initializeGame();
     }
 
@@ -87,6 +89,108 @@ public class GameModel implements Serializable {
         gameState = GameState.FACTORY_SELECTION;
     }
 
+    public boolean processRoundEnd() {
+        if (isProcessingRound || !isRoundComplete()) {
+            return false;
+        }
+
+        isProcessingRound = true;
+        try {
+            // Process wall tiling for all players
+            for (Player player : players) {
+                processPlayerWallTiling(player);
+            }
+
+            // Clear pattern lines and calculate penalties
+            for (Player player : players) {
+                applyFloorPenalties(player);
+                clearPatternLines(player);
+            }
+
+            // Check if game should end
+            if (shouldEndGame()) {
+                calculateFinalScores();
+                gameState = GameState.GAME_END;
+                return true;
+            }
+
+            // Start new round
+            startNewRound();
+            return true;
+        } finally {
+            isProcessingRound = false;
+        }
+    }
+
+    private void processPlayerWallTiling(Player player) {
+        List<PatternLine> patterns = player.getPatternLines();
+        for (int i = 0; i < patterns.size(); i++) {
+            PatternLine line = patterns.get(i);
+            if (line.isFull()) {
+                TileColor color = line.getColor();
+                if (color != null) {
+                    int points = player.getWall().addTile(i, color);
+                    player.addScore(points);
+                }
+            }
+        }
+    }
+
+    private void applyFloorPenalties(Player player) {
+        int penalty = player.getFloorLine().calculatePenalty();
+        if (penalty != 0) {
+            player.addScore(penalty);
+            player.getFloorLine().clear();
+        }
+    }
+
+    private void clearPatternLines(Player player) {
+        for (PatternLine line : player.getPatternLines()) {
+            line.clear();
+        }
+        player.clearHand();
+    }
+
+    private boolean shouldEndGame() {
+        //TODO: Implement end game conditions
+        //return hasCompletedRow() || currentRound >= 5;
+        return false;
+    }
+
+    private void calculateFinalScores() {
+        for (Player player : players) {
+            int rowBonus = calculateRowBonus(player);
+            int columnBonus = calculateColumnBonus(player);
+            int colorBonus = calculateColorBonus(player);
+            player.addScore(rowBonus + columnBonus + colorBonus);
+        }
+    }
+
+    private int calculateRowBonus(Player player) {
+        return (int) IntStream.range(0, Wall.WALL_SIZE)
+                .filter(row -> player.getWall().isRowComplete(row))
+                .count() * 2;
+    }
+
+    private int calculateColumnBonus(Player player) {
+        return (int) IntStream.range(0, Wall.WALL_SIZE)
+                .filter(col -> player.getWall().isColumnComplete(col))
+                .count() * 7;
+    }
+
+    private int calculateColorBonus(Player player) {
+        return (int) Arrays.stream(TileColor.values())
+                .filter(color -> player.getWall().isColorComplete(color))
+                .count() * 10;
+    }
+
+    private void startNewRound() {
+        currentRound++;
+        firstPlayerTokenTaken = false;
+        gameState = GameState.FACTORY_SELECTION;
+        initializeGame();
+    }
+
     public boolean selectTilesFromFactory(int factoryIndex, TileColor color, int patternLineIndex) {
         if (!isValidSelection(factoryIndex, color, patternLineIndex)) {
             return false;
@@ -105,36 +209,6 @@ public class GameModel implements Serializable {
         return placeTiles(selectedTiles, patternLineIndex);
     }
 
-    private boolean isValidSelection(int factoryIndex, TileColor color, int patternLineIndex) {
-        if (gameState != GameState.FACTORY_SELECTION) {
-            return false;
-        }
-
-        if (factoryIndex < 0 || factoryIndex >= factories.size()) {
-            return false;
-        }
-
-        if (!currentPlayer.canPlaceTiles(color, patternLineIndex)) {
-            return false;
-        }
-
-        return true;
-    }
-
-    private void recordAction(int factoryIndex, TileColor color, int patternLineIndex,
-                              List<Tile> selectedTiles, List<Tile> remainingTiles) {
-        actionHistory.push(new GameAction(
-                GameAction.ActionType.FACTORY_SELECTION,
-                Map.of(
-                        "factoryIndex", factoryIndex,
-                        "color", color,
-                        "patternLineIndex", patternLineIndex,
-                        "selectedTiles", new ArrayList<>(selectedTiles),
-                        "remainingTiles", new ArrayList<>(remainingTiles)
-                )
-        ));
-    }
-
     public boolean selectTilesFromCenter(TileColor color, int patternLineIndex) {
         if (!isValidCenterSelection(color, patternLineIndex)) {
             return false;
@@ -144,6 +218,13 @@ public class GameModel implements Serializable {
         handleFirstPlayerToken();
 
         return placeTiles(selectedTiles, patternLineIndex);
+    }
+
+    private boolean isValidSelection(int factoryIndex, TileColor color, int patternLineIndex) {
+        return gameState == GameState.FACTORY_SELECTION &&
+                factoryIndex >= 0 &&
+                factoryIndex < factories.size() &&
+                currentPlayer.canPlaceTiles(color, patternLineIndex);
     }
 
     private boolean isValidCenterSelection(TileColor color, int patternLineIndex) {
@@ -188,6 +269,10 @@ public class GameModel implements Serializable {
         PatternLine targetLine = currentPlayer.getPatternLines().get(patternLineIndex);
         List<Tile> overflow = calculateOverflow(tiles, targetLine);
 
+        // Add tiles to pattern line
+        targetLine.addTiles(tiles.subList(0, tiles.size() - overflow.size()));
+
+        // Handle overflow
         if (!overflow.isEmpty()) {
             currentPlayer.getFloorLine().addTiles(overflow);
         }
@@ -197,133 +282,38 @@ public class GameModel implements Serializable {
 
     private List<Tile> calculateOverflow(List<Tile> tiles, PatternLine targetLine) {
         List<Tile> overflow = new ArrayList<>();
+        int availableSpace = targetLine.getSize() - targetLine.getTiles().size();
 
-        if (!targetLine.addTiles(tiles)) {
-            overflow.addAll(tiles);
-        } else {
-            int availableSpace = targetLine.getSize() - targetLine.getTiles().size();
-            if (tiles.size() > availableSpace) {
-                overflow.addAll(tiles.subList(availableSpace, tiles.size()));
-            }
+        if (tiles.size() > availableSpace) {
+            overflow.addAll(tiles.subList(availableSpace, tiles.size()));
         }
 
         return overflow;
     }
 
-
-    public void endTurn() {
-        if (isRoundComplete()) {
-            handleRoundEnd();
-        } else {
-            moveToNextPlayer();
-        }
+    private void recordAction(int factoryIndex, TileColor color, int patternLineIndex,
+                              List<Tile> selectedTiles, List<Tile> remainingTiles) {
+        actionHistory.push(new GameAction(
+                GameAction.ActionType.FACTORY_SELECTION,
+                Map.of(
+                        "factoryIndex", factoryIndex,
+                        "color", color,
+                        "patternLineIndex", patternLineIndex,
+                        "selectedTiles", new ArrayList<>(selectedTiles),
+                        "remainingTiles", new ArrayList<>(remainingTiles)
+                )
+        ));
     }
 
     public boolean isRoundComplete() {
-        boolean factoriesEmpty = getFactories().stream().allMatch(Factory::isEmpty);
-        boolean centerEmpty = getCenterPool().isEmpty();
-        boolean noTilesInHands = true;  // Add this check
-
-        // Check if any player has tiles in hand
-        for (Player player : getPlayers()) {
-            if (!player.getHand().isEmpty()) {  // Need to add hand tracking to Player class
-                noTilesInHands = false;
-                break;
-            }
-        }
-
-        return factoriesEmpty && centerEmpty && noTilesInHands;
-    }
-
-    private void moveToNextPlayer() {
-        int currentIndex = players.indexOf(currentPlayer);
-        currentPlayer = players.get((currentIndex + 1) % players.size());
-    }
-
-    private void handleRoundEnd() {
-        processWallTiling();
-
-        if (isGameComplete()) {
-            finishGame();
-        } else {
-            startNewRound();
-        }
-    }
-
-    private void processWallTiling() {
-        for (Player player : players) {
-            // Process pattern lines
-            List<PatternLine> patterns = player.getPatternLines();
-            for (PatternLine line : patterns) {
-                if (line.isFull()) {
-                    processCompletedLine(player, line);
-                }
-            }
-
-            // Apply floor penalties
-            applyFloorPenalties(player);
-        }
-    }
-
-    public void setPlayerTurn(Player player) {
-        if (!players.contains(player)) {
-            throw new IllegalArgumentException("Player must be part of the game");
-        }
-        this.currentPlayer = player;
+        return factories.stream().allMatch(Factory::isEmpty) &&
+                centerPool.stream().noneMatch(tile -> tile.getColor() != null) &&
+                players.stream().allMatch(p -> p.getHand().isEmpty());
     }
 
     public void nextTurn() {
         int currentIndex = players.indexOf(currentPlayer);
         currentPlayer = players.get((currentIndex + 1) % players.size());
-    }
-
-    public void addTilesToCenter(List<Tile> tiles) {
-        centerPool.addAll(tiles);
-    }
-
-    private void processCompletedLine(Player player, PatternLine line) {
-        TileColor color = line.getColor();
-        int lineIndex = player.getPatternLines().indexOf(line);
-        int points = player.getWall().addTile(lineIndex, color);
-        player.addScore(points);
-        line.clear();
-    }
-
-    private void applyFloorPenalties(Player player) {
-        int penalty = ScoringSystem.calculateFloorLinePenalty(player.getFloorLine());
-        player.addScore(penalty);
-        player.getFloorLine().clear();
-    }
-
-    private boolean isGameComplete() {
-        return hasCompletedRow() || currentRound >= 5;
-    }
-
-    private boolean hasCompletedRow() {
-        return players.stream().anyMatch(Player::hasCompletedRow);
-    }
-
-    private void finishGame() {
-        calculateFinalScores();
-        gameState = GameState.GAME_END;
-    }
-
-    private void calculateFinalScores() {
-        for (Player player : players) {
-            int bonus = ScoringSystem.calculateEndGameBonus(player);
-            player.addScore(bonus);
-        }
-    }
-
-    private void startNewRound() {
-        currentRound++;
-        resetRoundState();
-        initializeGame();
-    }
-
-    private void resetRoundState() {
-        firstPlayerTokenTaken = false;
-        gameState = GameState.FACTORY_SELECTION;
     }
 
     // Getters
@@ -343,6 +333,13 @@ public class GameModel implements Serializable {
         return currentPlayer;
     }
 
+    public void setPlayerTurn(Player player) {
+        if (!players.contains(player)) {
+            throw new IllegalArgumentException("Player must be part of the game");
+        }
+        this.currentPlayer = player;
+    }
+
     public GameState getGameState() {
         return gameState;
     }
@@ -353,5 +350,20 @@ public class GameModel implements Serializable {
 
     public boolean isFirstPlayerTokenTaken() {
         return firstPlayerTokenTaken;
+    }
+
+    // For testing and debugging
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Game State: ").append(gameState)
+                .append("\nCurrent Round: ").append(currentRound)
+                .append("\nCurrent Player: ").append(currentPlayer.getName())
+                .append("\nFirst Player Token Taken: ").append(firstPlayerTokenTaken)
+                .append("\n\nPlayers:\n");
+
+        players.forEach(player -> sb.append(player.toString()).append("\n"));
+
+        return sb.toString();
     }
 }

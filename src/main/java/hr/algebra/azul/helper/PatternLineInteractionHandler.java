@@ -124,16 +124,23 @@ public class PatternLineInteractionHandler {
 
             // Add tiles to pattern line in the model
             PatternLine patternLine = gameModel.getCurrentPlayer().getPatternLines().get(lineIndex);
+
+            // Calculate overflow before adding tiles
+            List<Tile> overflow = calculateOverflow(tiles, patternLine);
+
+            // Add tiles to pattern line
             patternLine.addTiles(tiles);
 
-            // Handle overflow if any
-            List<Tile> overflow = calculateOverflow(tiles, patternLine);
+            // Handle overflow and update floor line
             if (!overflow.isEmpty()) {
                 gameModel.getCurrentPlayer().getFloorLine().addTiles(overflow);
+                // Add animation for overflow tiles moving to floor line
+                animateOverflowTiles(overflow, playerBoard);
             }
 
-            // Update the view
+            // Update both pattern lines and floor line display
             updatePatternLines();
+            updateFloorLine(gameModel.getCurrentPlayer(), playerBoard);
 
             // End turn after successful placement
             Platform.runLater(() -> {
@@ -144,6 +151,57 @@ public class PatternLineInteractionHandler {
         });
 
         allAnimations.play();
+    }
+
+    private void updateFloorLine(Player player, VBox playerBoard) {
+        HBox floorLine = (HBox) playerBoard.getChildren().stream()
+                .filter(node -> node instanceof HBox)
+                .reduce((first, second) -> second) // Get the last HBox (floor line)
+                .orElse(null);
+
+        if (floorLine != null) {
+            floorLine.getChildren().clear();
+
+            // Create spaces for the floor line
+            for (int i = 0; i < FloorLine.MAX_TILES; i++) {
+                Circle space = new Circle(15);
+                space.setFill(Color.web("#374151")); // Empty space color
+                space.setStroke(Color.web("#4B5563"));
+                space.setStrokeWidth(1);
+
+                // If there's a tile at this position, color it
+                Tile tile = player.getFloorLine().getTileAt(i);
+                if (tile != null && tile.getColor() != null) {
+                    space.setFill(Color.web(tile.getColor().getHexCode()));
+                }
+
+                floorLine.getChildren().add(space);
+            }
+        }
+    }
+
+    private void animateOverflowTiles(List<Tile> overflow, VBox playerBoard) {
+        HBox floorLine = (HBox) playerBoard.getChildren().stream()
+                .filter(node -> node instanceof HBox)
+                .reduce((first, second) -> second)
+                .orElse(null);
+
+        if (floorLine == null) return;
+
+        for (Tile tile : overflow) {
+            Circle overflowTile = new Circle(15);
+            overflowTile.setFill(Color.web(tile.getColor().getHexCode()));
+            overflowTile.setStroke(Color.web("#4B5563"));
+            overflowTile.setStrokeWidth(1);
+
+            // Add animation for overflow tiles
+            PathTransition path = createPathTransition(
+                    getCurrentPlayerHand(),
+                    floorLine,
+                    overflowTile
+            );
+            path.play();
+        }
     }
 
     private PathTransition createPathTransition(Node source, Node target, Node movingNode) {

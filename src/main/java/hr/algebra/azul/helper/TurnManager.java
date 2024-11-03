@@ -95,11 +95,15 @@ public class TurnManager {
 
         // Check if round is complete
         if (isRoundComplete()) {
-            handleRoundEnd();
         } else {
             switchToNextPlayer();
             showTurnChangeNotification();
         }
+    }
+
+    public void setTurnDuration(int seconds) {
+        timeRemaining.set(seconds);
+        resetTimer();
     }
 
     private void switchToNextPlayer() {
@@ -231,12 +235,6 @@ public class TurnManager {
         return factoriesEmpty && centerEmpty;
     }
 
-    public void handleRoundEnd() {
-        // This method should be implemented in the game controller
-        if (roundEndCallback != null) {
-            roundEndCallback.run();
-        }
-    }
 
     private void showInvalidTurnDialog() {
         Alert alert = new Alert(Alert.AlertType.WARNING);
@@ -284,11 +282,7 @@ public class TurnManager {
         }
     }
 
-    // Callback for round end handling
-    private Runnable roundEndCallback;
-    public void setRoundEndCallback(Runnable callback) {
-        this.roundEndCallback = callback;
-    }
+
 
     public boolean isGamePaused() {
         return isGamePaused;

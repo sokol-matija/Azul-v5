@@ -29,6 +29,7 @@ public class WallTilingManager {
         for (Player player : gameModel.getPlayers()) {
             List<PatternLine> patternLines = player.getPatternLines();
             boolean wallChanged = false;
+            int roundScore = 0;
 
             // Process each pattern line
             for (int i = 0; i < patternLines.size(); i++) {
@@ -40,7 +41,7 @@ public class WallTilingManager {
                     if (color != null) {
                         // Add tile to wall and get points
                         int points = player.getWall().addTile(i, color);
-                        player.addScore(points);
+                        roundScore += points;
                         wallChanged = true;
 
                         // Clear the pattern line after moving tile to wall
@@ -52,22 +53,60 @@ public class WallTilingManager {
                 }
             }
 
+            // Update player's score
+            if (roundScore > 0) {
+                player.addScore(roundScore);
+            }
+
+            // Process floor line penalties
+            int penalty = player.getFloorLine().calculatePenalty();
+            if (penalty != 0) {
+                player.addScore(penalty); // This will subtract points as penalty is negative
+                player.getFloorLine().clear();
+                updateFloorLineDisplay(player);
+            }
+
             // Update the wall display if changes were made
             if (wallChanged) {
                 updateWallDisplay(player);
             }
-
-            // Process floor line penalties after wall tiling
-            int penalty = player.getFloorLine().calculatePenalty();
-            if (penalty != 0) {
-                player.addScore(penalty);
-                player.getFloorLine().clear();
-                updateFloorLineDisplay(player);
-            }
         }
 
-        // Check for completed rows and update display
-        checkAndHighlightCompletedRows();
+        // Check for completed rows/columns/colors and award bonus points
+        awardBonusPoints();
+    }
+
+    private void awardBonusPoints() {
+        for (Player player : gameModel.getPlayers()) {
+            Wall wall = player.getWall();
+            int bonus = 0;
+
+            // Check for completed rows (2 points each)
+            for (int row = 0; row < Wall.WALL_SIZE; row++) {
+                if (wall.isRowComplete(row)) {
+                    bonus += 2;
+                }
+            }
+
+            // Check for completed columns (7 points each)
+            for (int col = 0; col < Wall.WALL_SIZE; col++) {
+                if (wall.isColumnComplete(col)) {
+                    bonus += 7;
+                }
+            }
+
+            // Check for completed colors (10 points each)
+            for (TileColor color : TileColor.values()) {
+                if (wall.isColorComplete(color)) {
+                    bonus += 10;
+                }
+            }
+
+            // Add bonus points if any
+            if (bonus > 0) {
+                player.addScore(bonus);
+            }
+        }
     }
 
     private void animateWallTiling(Player player, int row, TileColor color) {
