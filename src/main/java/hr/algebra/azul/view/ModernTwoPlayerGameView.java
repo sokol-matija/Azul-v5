@@ -47,6 +47,8 @@ public class ModernTwoPlayerGameView {
     private Button saveButton;
     private Button exitButton;
     private Button settingsButton;
+    private Button endTurnButton;
+    private Button endRoundButton;
 
     // Factory Displays
     private GridPane factoriesContainer;
@@ -423,14 +425,16 @@ public class ModernTwoPlayerGameView {
 
 
     private void createWallGrid(GridPane wall) {
-        Wall wallModel = new Wall();
-        TileColor[][] wallPattern = wallModel.initializeWallPattern();
+        wall.setHgap(4);
+        wall.setVgap(4);
+        wall.setStyle("-fx-padding: 5;");
 
-        for (int i = 0; i < 5; i++) {
-            for (int j = 0; j < 5; j++) {
-                StackPane tileSpace = createWallTileSpace(wallPattern[i][j], i, j);
-                addKeyboardSupport(tileSpace, wallPattern[i][j], i, j);
-                wall.add(tileSpace, j, i);
+        TileColor[][] wallPattern = new Wall().initializeWallPattern();
+
+        for (int row = 0; row < Wall.WALL_SIZE; row++) {
+            for (int col = 0; col < Wall.WALL_SIZE; col++) {
+                StackPane tileSpace = createWallTileSpace(wallPattern[row][col], row, col);
+                wall.add(tileSpace, col, row);
             }
         }
     }
@@ -440,38 +444,70 @@ public class ModernTwoPlayerGameView {
         tileSpace.setPrefSize(40, 40);
         tileSpace.setMinSize(40, 40);
         tileSpace.setMaxSize(40, 40);
+        tileSpace.setStyle("""
+        -fx-background-color: #1F2937;
+        -fx-background-radius: 5;
+        -fx-border-color: #374151;
+        -fx-border-radius: 5;
+        -fx-border-width: 1;
+        """);
 
-        // Create outer circle for hover stroke
-        Circle outerCircle = new Circle(16);
-        outerCircle.setFill(Color.TRANSPARENT);
-        outerCircle.setStroke(Color.web("#4B5563"));
-        outerCircle.setStrokeWidth(1);
-
-        // Base circle without stroke
+        // Background circle (always visible)
         Circle baseCircle = new Circle(15);
         baseCircle.setFill(Color.web("#374151"));
+        baseCircle.setStroke(Color.web("#4B5563"));
+        baseCircle.setStrokeWidth(1);
 
-        Circle colorIndicator = new Circle(5);
-        colorIndicator.setFill(Color.web(color.getHexCode()));
-        colorIndicator.setOpacity(0.5);
+        // Pattern indicator circle (shows what color can go here)
+        Circle patternIndicator = new Circle(5);
+        patternIndicator.setFill(Color.web(color.getHexCode()));
+        patternIndicator.setOpacity(0.3);
 
-        tileSpace.getChildren().addAll(outerCircle, baseCircle, colorIndicator);
+        // Tile circle (initially invisible, shown when tile is placed)
+        Circle tileCircle = new Circle(15);
+        tileCircle.setFill(Color.web(color.getHexCode()));
+        tileCircle.setOpacity(0);
 
-        // Add hover animation
-        addHoverAnimation(tileSpace, colorIndicator, outerCircle, color);
+        tileSpace.getChildren().addAll(baseCircle, patternIndicator, tileCircle);
+
+        // Add hover effect
+        setupWallTileHover(tileSpace, color);
 
         // Add tooltip
-        Tooltip tooltip = new Tooltip(String.format("Position [%d,%d]: Place %s tile here",
-                row + 1, col + 1, color.toString()));
+        Tooltip tooltip = new Tooltip(
+                String.format("Position [%d,%d]: %s tile", row + 1, col + 1, color.toString())
+        );
         tooltip.setStyle("""
         -fx-background-color: #1F2937;
         -fx-text-fill: white;
         -fx-font-size: 12px;
-        -fx-padding: 8px;
         """);
         Tooltip.install(tileSpace, tooltip);
 
         return tileSpace;
+    }
+
+    private void setupWallTileHover(StackPane tileSpace, TileColor color) {
+        DropShadow glow = new DropShadow();
+        glow.setColor(Color.web(color.getHexCode()));
+        glow.setRadius(10);
+        glow.setSpread(0.3);
+
+        tileSpace.setOnMouseEntered(e -> {
+            Circle patternIndicator = (Circle) tileSpace.getChildren().get(1);
+            FadeTransition fade = new FadeTransition(Duration.millis(200), patternIndicator);
+            fade.setToValue(0.8);
+            fade.play();
+            tileSpace.setEffect(glow);
+        });
+
+        tileSpace.setOnMouseExited(e -> {
+            Circle patternIndicator = (Circle) tileSpace.getChildren().get(1);
+            FadeTransition fade = new FadeTransition(Duration.millis(200), patternIndicator);
+            fade.setToValue(0.3);
+            fade.play();
+            tileSpace.setEffect(null);
+        });
     }
 
     private void addHoverAnimation(StackPane tileSpace, Circle colorIndicator, Circle outerCircle, TileColor color) {
@@ -645,8 +681,10 @@ public class ModernTwoPlayerGameView {
         undoButton = createIconButton("↩", "Undo");
         saveButton = createIconButton("💾", "Save");
         exitButton = createIconButton("✖", "Exit");
+        endTurnButton = createIconButton("➡", "End Turn");
+        endRoundButton = createIconButton("🔄", "End Round");
 
-        controlBar.getChildren().addAll(undoButton, saveButton, exitButton);
+        controlBar.getChildren().addAll(undoButton, saveButton, endTurnButton,endRoundButton, exitButton);
         root.setBottom(controlBar);
     }
 
@@ -786,4 +824,6 @@ public class ModernTwoPlayerGameView {
     public HBox getPlayer1Hand() { return player1Hand; }
     public HBox getPlayer2Hand() { return player2Hand; }
     public StackPane getAnimationLayer() { return animationLayer; }
+    public Button getEndTurnButton() { return endTurnButton; }
+    public Button getEndRoundButton() { return endRoundButton; }
 }

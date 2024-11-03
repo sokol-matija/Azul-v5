@@ -231,7 +231,7 @@ public class TurnManager {
         return factoriesEmpty && centerEmpty;
     }
 
-    private void handleRoundEnd() {
+    public void handleRoundEnd() {
         // This method should be implemented in the game controller
         if (roundEndCallback != null) {
             roundEndCallback.run();

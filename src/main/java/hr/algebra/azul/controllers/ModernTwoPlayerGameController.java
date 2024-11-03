@@ -1,9 +1,6 @@
     package hr.algebra.azul.controllers;
 
-    import hr.algebra.azul.helper.GameUIConstants;
-    import hr.algebra.azul.helper.PatternLineInteractionHandler;
-    import hr.algebra.azul.helper.TileAnimationManager;
-    import hr.algebra.azul.helper.TurnManager;
+    import hr.algebra.azul.helper.*;
     import hr.algebra.azul.models.*;
     import hr.algebra.azul.view.ModernTwoPlayerGameView;
     import javafx.animation.*;
@@ -34,6 +31,7 @@
 
     public class ModernTwoPlayerGameController {
         private PatternLineInteractionHandler patternLineInteractionHandler;
+        private WallTilingManager wallTilingManager;
         private final ModernTwoPlayerGameView view;
         private final GameModel gameModel;
         private final Stage primaryStage;
@@ -61,8 +59,9 @@
             this.view = view;
             this.primaryStage = primaryStage;
             this.gameModel = new GameModel(2);
+            this.wallTilingManager = new WallTilingManager(view, gameModel);
             turnManager = new TurnManager(gameModel, view, view.getTimerLabel());
-            this.patternLineInteractionHandler = new PatternLineInteractionHandler(view, gameModel,turnManager);// Initialize 2-player game
+            this.patternLineInteractionHandler = new PatternLineInteractionHandler(view, gameModel, turnManager);
             initializeController();
             updateEntireView();
         }
@@ -88,6 +87,8 @@
             view.getSaveButton().setOnAction(e -> handleSaveClick());
             view.getExitButton().setOnAction(e -> handleExitClick());
             view.getSettingsButton().setOnAction(e -> handleSettingsClick());
+            view.getEndTurnButton().setOnAction(e -> turnManager.handleEndTurn());
+            view.getEndRoundButton().setOnAction(e -> handleRoundEnd());
         }
 
 
@@ -353,7 +354,8 @@
 
                 // Check if center and factories are empty to end round
                 if (isCenterEmpty() && areFactoriesEmpty()) {
-                    handleRoundEnd();
+                    Platform.runLater(() -> handleRoundEnd());
+
                 }
             });
 
@@ -471,11 +473,15 @@
             HBox hand = getCurrentPlayerHand();
             hand.getChildren().clear();
 
+            // Update model
+            gameModel.getCurrentPlayer().clearHand();
+            gameModel.getCurrentPlayer().addTilesToHand(tiles);
+
+            // Update UI
             for (Tile tile : tiles) {
                 Circle tileCircle = new Circle(15);
                 tileCircle.setFill(Color.web(tile.getColor().getHexCode()));
                 tileCircle.setStroke(Color.web("#4B5563"));
-                tileCircle.setStrokeWidth(1);
                 hand.getChildren().add(tileCircle);
             }
             patternLineInteractionHandler.setupPatternLineInteractions();
@@ -584,46 +590,10 @@
             // Try to place tiles in the pattern line
             if (gameModel.selectTilesFromFactory(selectedFactoryIndex, selectedTiles.get(0).getColor(), lineIndex)) {
                 // Animate tiles moving to pattern line
-                animateTilesToPatternLine(playerHand, lineIndex, selectedTiles);
+                //animateTilesToPatternLine(playerHand, lineIndex, selectedTiles);
             }
         }
 
-        private void animateTilesToPatternLine(HBox hand, int lineIndex, List<Tile> tiles) {
-            VBox playerBoard = gameModel.getCurrentPlayer() == gameModel.getPlayers().get(0)
-                    ? view.getPlayer1Board()
-                    : view.getPlayer2Board();
-
-            VBox patternLinesContainer = patternLineInteractionHandler.findPatternLinesContainer(playerBoard);
-            if (patternLinesContainer == null) return;
-
-            HBox targetLine = (HBox) patternLinesContainer.getChildren().get(lineIndex + 1);
-
-            ParallelTransition allAnimations = new ParallelTransition();
-
-            for (Node tileNode : hand.getChildren()) {
-                PathTransition path = createPathTransition(
-                        hand,
-                        targetLine,
-                        tileNode,
-                        Duration.millis(500)
-                );
-                allAnimations.getChildren().add(path);
-            }
-
-            allAnimations.setOnFinished(e -> {
-                hand.getChildren().clear();
-                updatePatternLines();
-                // TODO: Implement  isRoundComplete method
-    //            if (gameModel.isRoundComplete()) {
-    //                handleRoundEnd();
-    //            } else {
-    //                gameModel.endTurn();
-    //                updateEntireView();
-    //            }
-            });
-
-            allAnimations.play();
-        }
 
         private TileColor getTileColorFromFill(Color fillColor) {
             // Convert the JavaFX color to hex format
@@ -880,9 +850,9 @@
                 for (int row = 0; row < 5; row++) {
                     for (int col = 0; col < 5; col++) {
                         StackPane space = (StackPane) wall.getChildren().get(row * 5 + col);
-                        if (player.wall.tiles[row][col]) {
+                        if (player.wall.getTiles()[row][col]) {
                             Circle tile = (Circle) space.getChildren().get(2);
-                            tile.setFill(Color.web(player.wall.wallPattern[row][col].getHexCode()));
+                            tile.setFill(Color.web(player.wall.getWallPattern()[row][col].getHexCode()));
                             tile.setOpacity(1.0);
                         }
                     }
@@ -1092,6 +1062,24 @@
         }
 
         private void handleRoundEnd() {
+            // Process wall tiling
+            wallTilingManager.processWallTiling();
+
+            // Reset game state for next round
+            gameModel.initializeGame();
+            gameModel.setPlayerTurn(gameModel.getPlayers().get(0)); // Reset to first player
+
+            // Update the view
+            updateEntireView();
+
+            // Reset timer
+            turnManager.resetTimer();
+
+            // Show round end dialog
+            Platform.runLater(() -> showRoundEndDialog());
+        }
+
+        private void showRoundEndDialog() {
             Dialog<ButtonType> dialog = new Dialog<>();
             dialog.setTitle("Round Complete");
             dialog.setHeaderText("Round Summary");
@@ -1103,9 +1091,9 @@
             List<Player> players = gameModel.getPlayers();
             for (Player player : players) {
                 VBox playerSummary = new VBox(5);
-                Label nameLabel = new Label(player.name);
+                Label nameLabel = new Label(player.getName());
                 nameLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: white;");
-                Label scoreLabel = new Label("Score: " + player.score);
+                Label scoreLabel = new Label("Score: " + player.getScore());
                 scoreLabel.setStyle("-fx-text-fill: #9CA3AF;");
                 playerSummary.getChildren().addAll(nameLabel, scoreLabel);
                 content.getChildren().add(playerSummary);
@@ -1114,9 +1102,33 @@
             dialog.getDialogPane().setContent(content);
             dialog.getDialogPane().getButtonTypes().add(ButtonType.OK);
 
-            styleDialog(dialog);
-            dialog.showAndWait().ifPresent(response -> startNewRound());
+            // Style the dialog
+            DialogPane dialogPane = dialog.getDialogPane();
+            dialogPane.setStyle("""
+        -fx-background-color: #1F2937;
+        """);
+            dialogPane.lookup(".content").setStyle("-fx-background-color: #1F2937;");
+            dialogPane.lookup(".header-panel").setStyle("""
+        -fx-background-color: #111827;
+        -fx-padding: 20px;
+        """);
+            dialogPane.lookup(".header-panel .label").setStyle("""
+        -fx-text-fill: white;
+        -fx-font-size: 18px;
+        -fx-font-weight: bold;
+        """);
+
+            // Style buttons
+            dialog.getDialogPane().lookupButton(ButtonType.OK).setStyle("""
+        -fx-background-color: #3B82F6;
+        -fx-text-fill: white;
+        -fx-padding: 8 15;
+        -fx-background-radius: 5;
+        """);
+
+            dialog.showAndWait();
         }
+
 
         private void handleGameEnd() {
             Dialog<ButtonType> dialog = new Dialog<>();

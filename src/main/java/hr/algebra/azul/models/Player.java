@@ -8,6 +8,7 @@ import java.util.List;
 public class Player implements Serializable {
     private static final int PATTERN_LINE_COUNT = 5;
 
+    private List<Tile> hand;
     public final String name;
     public int score;
     public final Wall wall;
@@ -15,6 +16,7 @@ public class Player implements Serializable {
     public final FloorLine floorLine;
 
     public Player(String name) {
+        this.hand = new ArrayList<>();
         this.name = name;
         this.score = 0;
         this.wall = new Wall();
@@ -156,6 +158,18 @@ public class Player implements Serializable {
         }
 
         return finalScore;
+    }
+
+    public List<Tile> getHand() {
+        return hand;
+    }
+
+    public void clearHand() {
+        hand.clear();
+    }
+
+    public void addTilesToHand(List<Tile> tiles) {
+        hand.addAll(tiles);
     }
 
     @Override

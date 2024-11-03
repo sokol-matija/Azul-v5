@@ -219,8 +219,20 @@ public class GameModel implements Serializable {
         }
     }
 
-    private boolean isRoundComplete() {
-        return factories.stream().allMatch(Factory::isEmpty) && centerPool.isEmpty();
+    public boolean isRoundComplete() {
+        boolean factoriesEmpty = getFactories().stream().allMatch(Factory::isEmpty);
+        boolean centerEmpty = getCenterPool().isEmpty();
+        boolean noTilesInHands = true;  // Add this check
+
+        // Check if any player has tiles in hand
+        for (Player player : getPlayers()) {
+            if (!player.getHand().isEmpty()) {  // Need to add hand tracking to Player class
+                noTilesInHands = false;
+                break;
+            }
+        }
+
+        return factoriesEmpty && centerEmpty && noTilesInHands;
     }
 
     private void moveToNextPlayer() {
