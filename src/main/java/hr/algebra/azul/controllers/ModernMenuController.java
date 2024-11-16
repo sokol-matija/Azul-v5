@@ -1,7 +1,6 @@
 package hr.algebra.azul.controllers;
 
 import hr.algebra.azul.models.GameState;
-import hr.algebra.azul.view.ModernLobbyView;
 import hr.algebra.azul.view.ModernMenuView;
 import hr.algebra.azul.view.ModernTwoPlayerGameView;
 import javafx.application.Platform;
@@ -24,7 +23,7 @@ public class ModernMenuController {
     private void initializeController() {
         // Set up button click handlers with smooth transitions
         view.getSinglePlayerButton().setOnAction(e -> handleSinglePlayerClick());
-        view.getMultiPlayerButton().setOnAction(e -> handleMultiplayerClick());
+        //view.getMultiPlayerButton().setOnAction(e -> handleMultiplayerClick());
         view.getOptionsButton().setOnAction(e -> handleOptionsClick());
         view.getExitButton().setOnAction(e -> handleExitClick());
 
@@ -35,24 +34,21 @@ public class ModernMenuController {
         });
     }
 
+
     private void handleSinglePlayerClick() {
         gameState.setCurrentScreen("SINGLE_PLAYER");
         ModernTwoPlayerGameView gameView = new ModernTwoPlayerGameView();
         ModernTwoPlayerGameController gameController =
                 new ModernTwoPlayerGameController(gameView, primaryStage);
-        gameController.show();
-    }
 
-    private void handleMultiplayerClick() {
-        ModernLobbyView lobbyView = new ModernLobbyView();
-        LobbyController lobbyController = new LobbyController(lobbyView);
-
-        // Fade out menu and show lobby
+        // Hide menu window
         view.getStage().hide();
-        lobbyController.show();
 
-        // Handle lobby window close
-        lobbyView.getStage().setOnCloseRequest(e -> {
+        // Show game window
+        gameController.show();
+
+        // Set up handler for when game window closes
+        gameView.getStage().setOnCloseRequest(e -> {
             view.getStage().show();
         });
     }
