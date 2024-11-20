@@ -9,6 +9,8 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import javafx.stage.Stage;
 
+import java.io.IOException;
+
 public class ModernMenuController {
     private ModernMenuView view;
     private GameState gameState;
@@ -24,7 +26,13 @@ public class ModernMenuController {
     private void initializeController() {
         // Set up button click handlers with smooth transitions
         view.getSinglePlayerButton().setOnAction(e -> handleSinglePlayerClick());
-        view.getMultiPlayerButton().setOnAction(e -> handleMultiplayerClick());
+        view.getMultiPlayerButton().setOnAction(e -> {
+            try {
+                handleMultiplayerClick();
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
+            }
+        });
         view.getOptionsButton().setOnAction(e -> handleOptionsClick());
         view.getExitButton().setOnAction(e -> handleExitClick());
 
@@ -43,7 +51,7 @@ public class ModernMenuController {
         gameController.show();
     }
 
-    private void handleMultiplayerClick() {
+    private void handleMultiplayerClick() throws IOException {
         ModernLobbyView lobbyView = new ModernLobbyView();
         LobbyController lobbyController = new LobbyController(lobbyView);
 

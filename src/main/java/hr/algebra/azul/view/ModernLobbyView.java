@@ -15,6 +15,7 @@ public class ModernLobbyView {
     private VBox selectedLobbyInfo;
     private Button createLobbyButton;
     private Button refreshButton;
+    private Button joinButton;
     private TextField searchField;
     private GameLobby selectedLobby;
 
@@ -22,17 +23,16 @@ public class ModernLobbyView {
     private static final String DARK_BG = "#111827";
     private static final String CARD_BG = "#1F2937";
     private static final String BLUE_ACCENT = "#3B82F6";
+    private static final String HOVER_ACCENT = "#2563EB";
 
     public ModernLobbyView() {
         createView();
     }
 
     private void createView() {
-        // Initialize stage
         stage = new Stage();
         stage.setTitle("Azul - Game Lobby");
 
-        // Create main container
         BorderPane root = new BorderPane();
         root.setStyle(String.format("-fx-background-color: %s;", DARK_BG));
         root.setPadding(new Insets(20));
@@ -49,7 +49,6 @@ public class ModernLobbyView {
         );
         root.setCenter(content);
 
-        // Create scene
         scene = new Scene(root, 1000, 700);
         stage.setScene(scene);
     }
@@ -67,20 +66,35 @@ public class ModernLobbyView {
             -fx-text-fill: white;
             """);
 
-        createLobbyButton = new Button("Create Lobby");
-        createLobbyButton.setStyle("""
-            -fx-background-color: #3B82F6;
-            -fx-text-fill: white;
-            -fx-font-size: 14px;
-            -fx-padding: 10 20;
-            -fx-background-radius: 5;
-            """);
+        createLobbyButton = createStyledButton("Create Lobby", BLUE_ACCENT);
+        joinButton = createStyledButton("Join Lobby", BLUE_ACCENT);
+        joinButton.setDisable(true);
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        header.getChildren().addAll(title, spacer, createLobbyButton);
+        header.getChildren().addAll(title, spacer, joinButton, createLobbyButton);
         return header;
+    }
+
+    private Button createStyledButton(String text, String color) {
+        Button button = new Button(text);
+        button.setStyle(String.format("""
+            -fx-background-color: %s;
+            -fx-text-fill: white;
+            -fx-font-size: 14px;
+            -fx-padding: 10 20;
+            -fx-background-radius: 5;
+            """, color));
+
+        button.setOnMouseEntered(e ->
+                button.setStyle(button.getStyle().replace(color, HOVER_ACCENT))
+        );
+        button.setOnMouseExited(e ->
+                button.setStyle(button.getStyle().replace(HOVER_ACCENT, color))
+        );
+
+        return button;
     }
 
     private HBox createSearchBar() {
@@ -125,24 +139,19 @@ public class ModernLobbyView {
             -fx-text-fill: white;
             """);
 
-        // Initialize lobby list view
         lobbyListView = new ListView<>();
         lobbyListView.setStyle("""
-    -fx-background-color: transparent;
-    -fx-background: transparent;
-    -fx-control-inner-background: #1F2937;
-    -fx-control-inner-background-alt: #1F2937;
-    -fx-background-insets: 0;
-    -fx-padding: 5;
-    """);
-        VBox.setVgrow(lobbyListView, Priority.ALWAYS);
-
-        // Set custom cell factory
+            -fx-background-color: transparent;
+            -fx-background: transparent;
+            -fx-control-inner-background: #1F2937;
+            -fx-control-inner-background-alt: #1F2937;
+            """);
         lobbyListView.setCellFactory(lv -> new LobbyListCell());
+        VBox.setVgrow(lobbyListView, Priority.ALWAYS);
 
         lobbyContainer.getChildren().addAll(listTitle, lobbyListView);
 
-        // Create selected lobby panel
+        // Selected lobby info panel
         selectedLobbyInfo = new VBox(15);
         selectedLobbyInfo.setPrefWidth(300);
         selectedLobbyInfo.setStyle("""
@@ -156,55 +165,49 @@ public class ModernLobbyView {
         return mainContent;
     }
 
-    // Custom ListCell for lobbies
     private class LobbyListCell extends ListCell<GameLobby> {
-        private VBox content;
-        private Label nameLabel;
-        private Label infoLabel;
+        private final VBox content;
+        private final Label nameLabel;
+        private final Label infoLabel;
 
         public LobbyListCell() {
             content = new VBox(5);
             content.setPadding(new Insets(10));
             content.setStyle("""
-            -fx-background-color: #1F2937;
-            -fx-border-color: #374151;
-            -fx-border-width: 1;
-            -fx-border-radius: 5;
-            """);
-
-            nameLabel = new Label();
-            nameLabel.setStyle("""
-            -fx-text-fill: white;
-            -fx-font-weight: bold;
-            -fx-font-size: 14px;
-            """);
-
-            infoLabel = new Label();
-            infoLabel.setStyle("""
-            -fx-text-fill: #9CA3AF;
-            -fx-font-size: 12px;
-            """);
-
-            content.getChildren().addAll(nameLabel, infoLabel);
-
-            // Add hover effect
-            content.setOnMouseEntered(e ->
-                    content.setStyle("""
-                -fx-background-color: #374151;
-                -fx-border-color: #4B5563;
-                -fx-border-width: 1;
-                -fx-border-radius: 5;
-                """)
-            );
-
-            content.setOnMouseExited(e ->
-                    content.setStyle("""
                 -fx-background-color: #1F2937;
                 -fx-border-color: #374151;
                 -fx-border-width: 1;
                 -fx-border-radius: 5;
-                """)
-            );
+                """);
+
+            nameLabel = new Label();
+            nameLabel.setStyle("""
+                -fx-text-fill: white;
+                -fx-font-weight: bold;
+                -fx-font-size: 14px;
+                """);
+
+            infoLabel = new Label();
+            infoLabel.setStyle("""
+                -fx-text-fill: #9CA3AF;
+                -fx-font-size: 12px;
+                """);
+
+            content.getChildren().addAll(nameLabel, infoLabel);
+
+            content.setOnMouseEntered(e -> content.setStyle("""
+                -fx-background-color: #374151;
+                -fx-border-color: #4B5563;
+                -fx-border-width: 1;
+                -fx-border-radius: 5;
+                """));
+
+            content.setOnMouseExited(e -> content.setStyle("""
+                -fx-background-color: #1F2937;
+                -fx-border-color: #374151;
+                -fx-border-width: 1;
+                -fx-border-radius: 5;
+                """));
         }
 
         @Override
@@ -213,7 +216,6 @@ public class ModernLobbyView {
 
             if (empty || lobby == null) {
                 setGraphic(null);
-                setStyle("-fx-background-color: transparent;");
             } else {
                 nameLabel.setText(lobby.getName());
                 infoLabel.setText(String.format("👑 %s • 👥 %d/%d • %s",
@@ -222,38 +224,12 @@ public class ModernLobbyView {
                         lobby.getMaxPlayers(),
                         lobby.getRank()));
                 setGraphic(content);
-                setStyle("-fx-background-color: transparent;");
             }
         }
     }
 
-    // Getters
-    public ListView<GameLobby> getLobbyListView() {
-        return lobbyListView;
-    }
-
-    public TextField getSearchField() {
-        return searchField;
-    }
-
-    public Button getCreateLobbyButton() {
-        return createLobbyButton;
-    }
-
-    public Button getRefreshButton() {
-        return refreshButton;
-    }
-
-    public Stage getStage() {
-        return stage;
-    }
-
     public void updateSelectedLobbyInfo(GameLobby lobby) {
-        if (lobby == null) {
-            selectedLobbyInfo.setVisible(false);
-            return;
-        }
-
+        selectedLobby = lobby;
         selectedLobbyInfo.getChildren().clear();
         selectedLobbyInfo.setVisible(true);
 
@@ -274,16 +250,9 @@ public class ModernLobbyView {
         addDetailRow(details, 2, "Status", lobby.getStatus());
         addDetailRow(details, 3, "Rank", lobby.getRank());
 
-        Button joinButton = new Button("Join Lobby");
-        joinButton.setStyle("""
-            -fx-background-color: #3B82F6;
-            -fx-text-fill: white;
-            -fx-padding: 10;
-            -fx-background-radius: 5;
-            -fx-min-width: 200;
-            """);
+        selectedLobbyInfo.getChildren().addAll(title, details);
 
-        selectedLobbyInfo.getChildren().addAll(title, details, joinButton);
+        joinButton.setDisable(lobby.getCurrentPlayers() >= lobby.getMaxPlayers());
     }
 
     private void addDetailRow(GridPane grid, int row, String label, String value) {
@@ -296,4 +265,12 @@ public class ModernLobbyView {
         grid.add(labelNode, 0, row);
         grid.add(valueNode, 1, row);
     }
+
+    // Getters
+    public Stage getStage() { return stage; }
+    public ListView<GameLobby> getLobbyListView() { return lobbyListView; }
+    public Button getCreateLobbyButton() { return createLobbyButton; }
+    public Button getRefreshButton() { return refreshButton; }
+    public Button getJoinButton() { return joinButton; }
+    public TextField getSearchField() { return searchField; }
 }
