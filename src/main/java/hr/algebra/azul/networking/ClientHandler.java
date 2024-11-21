@@ -66,6 +66,14 @@ class ClientHandler implements Runnable {
                     currentLobby = null;
                 }
             }
+            case "MOVE":
+                // Broadcast move to other player in same lobby
+                broadcastToOtherPlayer(clientId, message);
+                break;
+            case "TURN_END":
+                // Broadcast turn end to other player
+                broadcastToOtherPlayer(clientId, message);
+                break;
         }
     }
 

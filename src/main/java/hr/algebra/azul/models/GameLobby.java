@@ -10,6 +10,8 @@ public class GameLobby {
     private final StringProperty status = new SimpleStringProperty();
     private final StringProperty rank = new SimpleStringProperty();
 
+
+
     public GameLobby(String name, String host, int currentPlayers, int maxPlayers, String status, String rank) {
         this.name.set(name);
         this.host.set(host);

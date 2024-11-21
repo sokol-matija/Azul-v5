@@ -4,6 +4,7 @@ import hr.algebra.azul.models.GameLobby;
 import hr.algebra.azul.networking.GameClient;
 import hr.algebra.azul.view.LobbyDetailsView;
 import hr.algebra.azul.view.ModernLobbyView;
+import hr.algebra.azul.view.ModernTwoPlayerGameView;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -96,8 +97,21 @@ public class LobbyController {
             case "CHAT" -> handleChatMessage(parts);
             case "ERROR" -> handleError(parts);
             case "DISCONNECTED" -> handleDisconnect(parts);
+            case "GAME_START" -> {
+                Platform.runLater(() -> {
+                    ModernTwoPlayerGameView gameView = new ModernTwoPlayerGameView();
+                    ModernTwoPlayerGameController gameController =
+                            new ModernTwoPlayerGameController(gameView, view.getStage());
+                    if (detailsView != null) {
+                        detailsView.getStage().close();
+                    }
+                    view.getStage().hide();
+                    gameController.show();
+                });
+            }
         }
     }
+
 
     private void handleLobbiesUpdate(String[] parts) {
         Platform.runLater(() -> {
@@ -196,12 +210,25 @@ public class LobbyController {
 
             // Set up start game button if host
             if (isHost) {
-                detailsView.getStartGameButton().setOnAction(e ->
-                        client.startGame(lobbyName)
-                );
+                detailsView.getStartGameButton().setOnAction(e -> {
+                    // Check if lobby has 2 players
+                    if (detailsView.getPlayerList().getChildren().size() == 2) {
+                        ModernTwoPlayerGameView gameView = new ModernTwoPlayerGameView();
+                        ModernTwoPlayerGameController gameController =
+                                new ModernTwoPlayerGameController(gameView, view.getStage());
+                        detailsView.getStage().close();
+                        view.getStage().hide();
+                        gameController.show();
+
+                        // Notify other player
+                        client.startGame(lobbyName);
+                    } else {
+                        showError("Cannot Start", "Need exactly 2 players to start");
+                    }
+                });
             }
 
-            // Add initial player
+            // Initial player
             detailsView.addPlayer(client.getPlayer().getDisplayName(), false);
 
             view.getStage().hide();
